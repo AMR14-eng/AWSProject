@@ -1,0 +1,13 @@
+[Unit]
+Description=Gunicorn service for AWSproject
+After=network.target
+
+[Service]
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/AWSproject
+Environment="PATH=/home/ec2-user/AWSproject/venv/bin"
+ExecStart=/home/ec2-user/AWSproject/venv/bin/gunicorn --workers 3 --bind unix:AWSproject.sock -m 007 wsgi:app
+
+[Install]
+WantedBy=multi-user.target

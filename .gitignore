@@ -1,0 +1,35 @@
+# Byte-compiled / Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+.venv/
+.env
+
+# Flask / SQLAlchemy migrations
+migrations/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AWS / Boto3 credentials (if local)
+aws_credentials.json
+*.pem
+
+# Pytest / test outputs
+.coverage
+htmlcov/
+.pytest_cache/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
