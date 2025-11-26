@@ -1,4 +1,4 @@
-from models import Tenant, TenantUsage, db
+from app.models import Tenant, TenantUsage, db
 from datetime import date
 
 RATE = {

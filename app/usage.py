@@ -1,4 +1,4 @@
-from models import TenantUsage, db
+from app.models import TenantUsage, db
 from datetime import date
 
 def incr_results_processed(tenant_id, n=1):

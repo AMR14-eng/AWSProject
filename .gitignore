@@ -1,35 +1,57 @@
-# Byte-compiled / Python cache
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Virtual environment
+*.py[cod]
+*$py.class
+*.so
+.Python
 venv/
 env/
-.venv/
+ENV/
+.venv
+
+# Flask
+instance/
+.webassets-cache
+
+# Environment variables
 .env
+.env.local
 
-# Flask / SQLAlchemy migrations
-migrations/
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Logs
-*.log
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# AWS / Boto3 credentials (if local)
-aws_credentials.json
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfvars
+terraform/crash.log
+terraform/*.pem
 *.pem
 
-# Pytest / test outputs
-.coverage
-htmlcov/
-.pytest_cache/
-
-# IDE / editor files
+# IDE
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Secrets
+secrets/
+*.key
+*.crt
+
+# Backups
+*.backup
+*.bak

@@ -1,5 +1,5 @@
 import boto3
-from config import S3_BUCKET
+from app.config import S3_BUCKET
 
 cognito = boto3.client("cognito-idp")
 rds = boto3.client("rds")
