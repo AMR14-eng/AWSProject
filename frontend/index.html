@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabCloud Platform</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+        .labs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .lab-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 3px solid transparent;
+        }
+        .lab-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.15);
+        }
+        .lab-card.active {
+            border-color: #4CAF50;
+            background: #f8fff8;
+        }
+        .lab-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .content-section {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+        .admin-section {
+            border-left: 5px solid #ff6b6b;
+        }
+        .lab-section {
+            border-left: 5px solid #4CAF50;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.admin-btn {
+            background: #ff6b6b;
+        }
+        button.admin-btn:hover {
+            background: #ff5252;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        .results-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .result-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .billing-summary {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .tenant-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 LabCloud Platform</h1>
+            <p>Sistema Multi-Tenant para Laboratorios Médicos</p>
+        </div>
+
+        <!-- Selección de Laboratorio/Admin -->
+        <div class="labs-grid">
+            <div class="lab-card" onclick="selectLab('LAB001')">
+                <div class="lab-icon">🏥</div>
+                <h3>Laboratorio A</h3>
+                <p>Laboratorio principal</p>
+            </div>
+            
+            <div class="lab-card" onclick="selectLab('LAB002')">
+                <div class="lab-icon">🩺</div>
+                <h3>Laboratorio B</h3>
+                <p>Sucursal norte</p>
+            </div>
+            
+            <div class="lab-card" onclick="selectLab('admin')">
+                <div class="lab-icon">⚙️</div>
+                <h3>Vista Admin</h3>
+                <p>Gestión del sistema</p>
+            </div>
+        </div>
+
+        <!-- Indicador de Laboratorio Activo -->
+        <div id="active-lab-indicator" class="content-section" style="display: none;">
+            <h2>Laboratorio activo: <span id="current-lab-name"></span></h2>
+        </div>
+
+        <!-- VISTA LABORATORIO (Para Laboratorio A, Laboratorio B) -->
+        <div id="lab-view" class="content-section lab-section">
+            <h2>🎯 Gestión de Resultados</h2>
+            
+            <!-- Resultados de Pacientes -->
+            <div class="billing-summary">
+                <h3>📊 Resultados de Pacientes</h3>
+                <div id="results-list" class="results-list">
+                    <p>No hay resultados disponibles</p>
+                </div>
+            </div>
+
+            <!-- Agregar Resultado de Prueba -->
+            <div class="tenant-form">
+                <h3>➕ Agregar Resultado de Prueba</h3>
+                <input type="text" id="patient-id" placeholder="ID del Paciente (ej: PAT001)" required>
+                <input type="text" id="test-code" placeholder="Código de Prueba (ej: CBC)" required>
+                <input type="text" id="test-data" placeholder="Datos de Prueba (ej: {'hemoglobin': 14.5})" required>
+                <button onclick="addTestResult()">Agregar Resultado</button>
+            </div>
+
+            <!-- Buscar Resultados -->
+            <div class="tenant-form">
+                <h3>🔍 Buscar Resultados por Paciente</h3>
+                <input type="text" id="search-patient-id" placeholder="ID del Paciente (ej: PAT001)" required>
+                <button onclick="searchPatientResults()">Buscar Resultados</button>
+            </div>
+        </div>
+
+        <!-- VISTA ADMIN (Solo para administrador) -->
+        <div id="admin-view" class="content-section admin-section">
+            <h2>⚙️ Panel de Administración</h2>
+            
+            <!-- Lista de Laboratorios Existentes -->
+            <div class="billing-summary">
+                <h3>🏢 Laboratorios Registrados</h3>
+                <div id="tenants-list">
+                    <p>Cargando laboratorios...</p>
+                </div>
+            </div>
+
+            <!-- Crear Nuevo Laboratorio -->
+            <div class="tenant-form">
+                <h3>➕ Crear Nuevo Laboratorio</h3>
+                <input type="text" id="new-tenant-id" placeholder="ID del Laboratorio (ej: LAB003)" required>
+                <input type="text" id="new-company-name" placeholder="Nombre (ej: Laboratorio C)" required>
+                <select id="new-subscription-tier">
+                    <option value="basic">Básico</option>
+                    <option value="professional" selected>Profesional</option>
+                    <option value="enterprise">Enterprise</option>
+                </select>
+                <button class="admin-btn" onclick="createNewTenant()">Crear Laboratorio</button>
+            </div>
+
+            <!-- Sistema de Facturación -->
+            <div class="billing-summary">
+                <h3>💰 Sistema de Facturación</h3>
+                <div id="billing-summary">
+                    <p>Resumen de facturación global...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLab = null;
+        const API_BASE = 'http://localhost:5000';
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', function() {
+            // Por defecto, seleccionar admin para gestión
+            selectLab('admin');
+        });
+
+        function selectLab(labId) {
+            currentLab = labId;
+            
+            // Actualizar tarjetas activas
+            document.querySelectorAll('.lab-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Mostrar indicador
+            const indicator = document.getElementById('active-lab-indicator');
+            const labName = document.getElementById('current-lab-name');
+            
+            const labNames = {
+                'LAB001': '🏥 Laboratorio A',
+                'LAB002': '🩺 Laboratorio B', 
+                'admin': '⚙️ Administrador'
+            };
+            
+            labName.textContent = labNames[labId];
+            indicator.style.display = 'block';
+            
+            // Mostrar vista apropiada
+            if (labId === 'admin') {
+                document.getElementById('lab-view').classList.remove('active');
+                document.getElementById('admin-view').classList.add('active');
+                loadAdminData();
+            } else {
+                document.getElementById('admin-view').classList.remove('active');
+                document.getElementById('lab-view').classList.add('active');
+                loadLabData(labId);
+            }
+        }
+
+        // ============================================================================
+        // FUNCIONES DE LABORATORIO
+        // ============================================================================
+        
+        function loadLabData(labId) {
+            console.log(`Cargando datos para: ${labId}`);
+            // Aquí podrías cargar datos específicos del laboratorio si los tuvieras
+            document.getElementById('results-list').innerHTML = '<p>Usa "Buscar Resultados" para ver los datos</p>';
+        }
+
+        function addTestResult() {
+            const patientId = document.getElementById('patient-id').value;
+            const testCode = document.getElementById('test-code').value;
+            const testData = document.getElementById('test-data').value;
+            
+            if (!patientId || !testCode || !testData) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            // Validar que estamos en un laboratorio, no en admin
+            if (currentLab === 'admin') {
+                alert('Debes seleccionar un laboratorio para agregar resultados');
+                return;
+            }
+
+            try {
+                // Intentar parsear JSON si es posible, sino usar como string
+                const parsedTestData = JSON.parse(testData);
+            } catch (e) {
+                // Si no es JSON válido, usar como string
+                console.log('Test data no es JSON, usando como string');
+            }
+
+            fetch(`${API_BASE}/api/v1/results`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Tenant-Id': currentLab
+                },
+                body: JSON.stringify({
+                    patient_id: patientId,
+                    test_code: testCode,
+                    test_data: testData,
+                    tenant_id: currentLab
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { 
+                        throw new Error(err.message || 'Error del servidor'); 
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert('✅ Resultado agregado correctamente');
+                // Limpiar formulario
+                document.getElementById('patient-id').value = '';
+                document.getElementById('test-code').value = '';
+                document.getElementById('test-data').value = '';
+                
+                // Recargar resultados si estamos viendo este paciente
+                const searchPatientId = document.getElementById('search-patient-id').value;
+                if (searchPatientId === patientId) {
+                    searchPatientResults();
+                }
+            })
+            .catch(error => {
+                console.error('Error adding result:', error);
+                alert('❌ Error: ' + error.message);
+            });
+        }
+
+        function searchPatientResults() {
+            const patientId = document.getElementById('search-patient-id').value;
+            
+            if (!patientId) {
+                alert('Por favor ingresa un ID de paciente');
+                return;
+            }
+
+            if (currentLab === 'admin') {
+                alert('Debes seleccionar un laboratorio para buscar resultados');
+                return;
+            }
+
+            fetch(`${API_BASE}/api/v1/results/${patientId}`, {
+                method: 'GET',
+                headers: {
+                    'X-Tenant-Id': currentLab
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { 
+                        throw new Error(err.message || 'Error del servidor'); 
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                const resultsList = document.getElementById('results-list');
+                
+                if (data.results && data.results.length > 0) {
+                    resultsList.innerHTML = data.results.map(result => `
+                        <div class="result-item">
+                            <div>
+                                <strong>${patientId}</strong> - ${result.test_code}
+                                <br><small>${new Date(result.created_at).toLocaleString()}</small>
+                            </div>
+                            <div>${typeof result.test_data === 'object' ? JSON.stringify(result.test_data) : result.test_data}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    resultsList.innerHTML = '<p>No se encontraron resultados para este paciente</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error searching results:', error);
+                document.getElementById('results-list').innerHTML = 
+                    '<p>Error cargando resultados. Verifica que el backend esté corriendo.</p>';
+            });
+        }
+
+        // ============================================================================
+        // FUNCIONES DE ADMINISTRADOR  
+        // ============================================================================
+        
+        function loadAdminData() {
+            // Cargar lista de tenants (laboratorios)
+            fetch(`${API_BASE}/admin/tenants`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const tenantsList = document.getElementById('tenants-list');
+                    if (data.tenants && data.tenants.length > 0) {
+                        tenantsList.innerHTML = data.tenants.map(tenant => `
+                            <div class="result-item">
+                                <div>
+                                    <strong>${tenant.tenant_id}</strong> - ${tenant.company_name}
+                                    <br><small>Creado: ${new Date(tenant.created_at).toLocaleDateString()}</small>
+                                </div>
+                                <div>Tier: ${tenant.subscription_tier}</div>
+                            </div>
+                        `).join('');
+                    } else {
+                        tenantsList.innerHTML = '<p>No hay laboratorios registrados</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading tenants:', error);
+                    document.getElementById('tenants-list').innerHTML = 
+                        '<p>Error cargando laboratorios. Verifica que el backend esté corriendo.</p>';
+                });
+
+            updateBillingSummary();
+        }
+
+        function createNewTenant() {
+            const tenantId = document.getElementById('new-tenant-id').value;
+            const companyName = document.getElementById('new-company-name').value;
+            const subscriptionTier = document.getElementById('new-subscription-tier').value;
+
+            if (!tenantId || !companyName) {
+                alert('Por favor completa todos los campos');
+                return;
+            }
+
+            fetch(`${API_BASE}/admin/tenants`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    tenant_id: tenantId,
+                    company_name: companyName,
+                    subscription_tier: subscriptionTier
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { 
+                        throw new Error(err.message || 'Error del servidor'); 
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert('✅ Laboratorio creado exitosamente');
+                document.getElementById('new-tenant-id').value = '';
+                document.getElementById('new-company-name').value = '';
+                loadAdminData(); // Recargar lista
+            })
+            .catch(error => {
+                console.error('Error creating tenant:', error);
+                alert('❌ Error: ' + error.message);
+            });
+        }
+
+        function updateBillingSummary() {
+            // Simular datos de facturación (en producción esto vendría de tu API)
+            const billingSummary = document.getElementById('billing-summary');
+            billingSummary.innerHTML = `
+                <div class="result-item">
+                    <div>🏥 Laboratorio A</div>
+                    <div>$299.00</div>
+                </div>
+                <div class="result-item">
+                    <div>🩺 Laboratorio B</div>
+                    <div>$299.00</div>
+                </div>
+                <div class="result-item" style="border-top: 2px solid #333; font-weight: bold;">
+                    <div>TOTAL</div>
+                    <div>$598.00</div>
+                </div>
+            `;
+        }
+
+        // Función global para manejar errores de fetch
+        window.addEventListener('unhandledrejection', event => {
+            console.error('Unhandled promise rejection:', event.reason);
+        });
+    </script>
+</body>
+</html>
