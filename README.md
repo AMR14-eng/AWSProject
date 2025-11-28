@@ -3,15 +3,14 @@
 🏥 **SaaS platform for small laboratories with complete data isolation**
 
 ## 📋 Table of Contents
-
 - [Overview](#overview)
-- [Architecture](#architecture)
-- [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
 - [Deployment Guide](#deployment-guide)
 - [Testing](#testing)
+- [Billing System](#billing-system)
+- [API Reference](#api-reference)
 - [Troubleshooting](#troubleshooting)
-- [Cost Analysis](#cost-analysis)
 
 ## 🌟 Overview
 
@@ -22,487 +21,196 @@ LabCloud is a multi-tenant SaaS platform that allows small laboratories to:
 - Scale to 50+ laboratory clients on shared infrastructure
 
 ### Key Features
-
 - ✅ **Multi-Tenant Architecture** with complete data isolation
 - ✅ **HIPAA Compliant** - Encryption at rest and in transit
 - ✅ **Automated Tenant Provisioning** - New labs ready in < 5 minutes
-- ✅ **Usage Tracking & Billing** - Per-tenant metrics
+- ✅ **Usage Tracking & Billing** - Per-tenant metrics with automated invoicing
 - ✅ **RESTful API** with JWT authentication
-- ✅ **Infrastructure as Code** - 100% Terraform
-
-## 🏗️ Architecture
-
-### High-Level Design
-
-```
-                    Internet
-                        │
-                        ▼
-                ┌───────────────┐
-                │  EC2 Instance │
-                │  Flask + Nginx│
-                └───────┬───────┘
-                        │
-        ┌───────────────┼───────────────┐
-        ▼               ▼               ▼
-    ┌──────┐      ┌──────────┐    ┌──────┐
-    │  S3  │      │   RDS    │    │Cognito│
-    │Bucket│      │PostgreSQL│    │  IAM  │
-    └──────┘      └──────────┘    └──────┘
-```
-
-### Data Isolation Strategy
-
-**Pattern Selected: Separate Schema per Tenant (Pattern 2)**
-
-Each tenant gets an isolated PostgreSQL schema:
-
-```sql
--- Tenant LAB001
-CREATE SCHEMA lab001;
-CREATE TABLE lab001.lab_results (...);
-
--- Tenant LAB002
-CREATE SCHEMA lab002;
-CREATE TABLE lab002.lab_results (...);
-```
-
-**Why this approach?**
-- ✅ Strong isolation (schema-level permissions)
-- ✅ Cost-effective (~$9/tenant/month)
-- ✅ Scalable to 100+ tenants per RDS instance
-- ✅ Better than row-level security (single misconfigured query = data leak)
-- ✅ Cheaper than separate databases per tenant
-
-## 📋 Prerequisites
-
-### Required Tools
-
-- **Terraform** >= 1.0
-- **AWS CLI** >= 2.0
-- **Python** >= 3.8
-- **Git**
-
-### AWS Account
-
-- Active AWS account with appropriate permissions
-- AWS credentials configured (`aws configure`)
-
-### Required IAM Permissions
-
-Your AWS user needs permissions to create:
-- VPC, Subnets, Security Groups, Internet Gateway
-- EC2 instances, Key Pairs, Elastic IPs
-- RDS PostgreSQL instances
-- S3 buckets
-- Cognito User Pools
-- IAM Roles and Policies
+- ✅ **Infrastructure as Code** - 100% OpenTofu/Terraform
 
 ## 🚀 Quick Start
 
 ### 1. Clone Repository
-
 ```bash
 git clone <your-repo-url>
-cd labcloud-platform
+cd AWSProject
 ```
 
-### 2. Configure Terraform
-
+### 2. Deploy Infrastructure
 ```bash
 cd terraform
-cp terraform.tfvars.example terraform.tfvars
+tofu init
+tofu validate
+tofu apply
 ```
 
-Edit `terraform.tfvars`:
-
-```hcl
-aws_region   = "us-east-2"
-project_name = "tenant-lab"
-db_name      = "labcloud"
-db_username  = "postgres"
-db_password  = "YourSecurePassword123!"  # CHANGE THIS!
-```
-
-### 3. Deploy Infrastructure
-
+### 3. Deploy Application
 ```bash
-# Initialize Terraform
-terraform init
-
-# Validate configuration
-terraform validate
-
-# Preview changes
-terraform plan
-
-# Deploy (takes ~10-15 minutes)
-terraform apply
-
-# Save outputs
-terraform output > ../deployment-info.txt
+./scripts/deploy.sh
 ```
 
-### 4. Get Connection Info
-
+### 4. Run Tests
 ```bash
-# Get application URL
-terraform output application_url
-
-# Get health check endpoint
-terraform output health_check_url
-
-# Get SSH command
-terraform output ssh_command
+./scripts/test-labcloud.sh
 ```
 
-### 5. Verify Deployment
+## 📋 Prerequisites
 
-```bash
-# Test health endpoint
-APP_URL=$(terraform output -raw application_url)
-curl $APP_URL/health
+### Required Tools
+- **OpenTofu** >= 1.0 (or Terraform >= 1.0)
+- **AWS CLI** >= 2.0
+- **Python** >= 3.8
+- **Git**
 
-# Expected output:
-# {
-#   "status": "healthy",
-#   "database": "healthy",
-#   "timestamp": 1234567890
-# }
-```
+### AWS Account Requirements
+- Active AWS account with appropriate permissions
+- AWS credentials configured (`aws configure`)
+- Default region set to `us-east-2`
 
 ## 📚 Deployment Guide
 
-### Step 1: Understand the Stack
+### Step-by-Step Deployment
 
-**Infrastructure Components:**
-- **VPC**: 10.0.0.0/16 with 2 public subnets (multi-AZ)
-- **EC2**: t3.micro running Flask + Gunicorn + Nginx
-- **RDS**: db.t3.micro PostgreSQL 16 (encrypted)
-- **S3**: Bucket for tenant data
-- **Cognito**: User pool for authentication
-- **IAM**: Roles and policies for EC2
-
-### Step 2: Deploy Terraform
-
+1. **Infrastructure Setup**
 ```bash
 cd terraform
-
-# 1. Initialize
-terraform init
-
-# 2. Validate
-terraform validate
-# Output: Success! The configuration is valid.
-
-# 3. Plan
-terraform plan -out=tfplan
-
-# 4. Apply
-terraform apply tfplan
+tofu init
+tofu plan
+tofu apply
 ```
 
-**Expected Output:**
-```
-Apply complete! Resources: 15+ added, 0 changed, 0 destroyed.
-
-Outputs:
-
-application_url = "http://XX.XX.XX.XX"
-ec2_public_ip = "XX.XX.XX.XX"
-health_check_url = "http://XX.XX.XX.XX/health"
-...
-```
-
-### Step 3: Wait for Application to Start
-
-The EC2 user_data script automatically:
-1. Installs Python, PostgreSQL client, Nginx
-2. Creates the Flask application
-3. Initializes the database
-4. Starts the services
-
-**This takes ~5-10 minutes after Terraform completes.**
-
-Monitor progress:
-
+2. **Application Deployment**
 ```bash
-# SSH into EC2
-ssh -i terraform/django-server-key.pem ubuntu@$(terraform output -raw ec2_public_ip)
-
-# Watch user_data logs
-sudo tail -f /var/log/user-data.log
-
-# Check Flask service
-sudo systemctl status labcloud
-
-# Check Nginx
-sudo systemctl status nginx
+./scripts/deploy.sh
 ```
 
-### Step 4: Test Endpoints
-
+3. **Verification**
 ```bash
-APP_URL="http://XX.XX.XX.XX"  # Replace with your IP
+./scripts/test-labcloud.sh
+```
 
-# Health check
-curl $APP_URL/health
+### Deployment Outputs
+After successful deployment, you'll get:
+- **Application URL**: `http://YOUR_EC2_IP`
+- **Health Check**: `http://YOUR_EC2_IP/health`
+- **SSH Access**: `ssh -i tenant-lab-key.pem ubuntu@YOUR_EC2_IP`
 
-# Root endpoint
-curl $APP_URL/
+## 💰 Billing System
 
-# Create tenant (admin)
-curl -X POST $APP_URL/admin/tenants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tenant_id": "LAB001",
-    "company_name": "City Medical Lab",
-    "subscription_tier": "professional"
-  }'
+### Overview
+The platform includes automated usage tracking and billing:
 
-# List tenants
-curl $APP_URL/admin/tenants
+**Pricing Structure:**
+- **Base Fee**: $299/month
+- **Included Results**: 1,000 results/month
+- **Overage**: $0.50 per additional result
+- **Storage**: $0.50 per GB/month
+- **API Calls**: $0.10 per 1,000 calls
+
+### Using the Billing System
+
+**Generate Invoice for Tenant:**
+```bash
+# SSH into EC2 and run:
+cd /opt/labcloud
+sudo python3 -c "
+from app.billing import calculate_tenant_bill
+from datetime import date
+
+invoice = calculate_tenant_bill('LAB001', date.today().replace(day=1))
+print('Monthly Invoice:', invoice)
+"
+```
+
+**Track Current Usage:**
+```bash
+sudo python3 -c "
+from app.models import TenantUsage
+from datetime import date
+from app import app
+
+with app.app_context():
+    current_month = date.today().replace(day=1)
+    usage = TenantUsage.query.filter_by(month=current_month).all()
+    for u in usage:
+        print(f'{u.tenant_id}: {u.results_processed} results, {u.api_calls} API calls')
+"
 ```
 
 ## 🧪 Testing
 
-### Test 1: Infrastructure Validation
-
+### Automated Test Suite
 ```bash
-cd terraform
-
-# Validate Terraform syntax
-terraform validate
-
-# Check Terraform formatting
-terraform fmt -check
+./scripts/test-labcloud.sh
 ```
 
-**✅ Requirement:** `terraform validate` must pass without errors
+**Tests Included:**
+- Infrastructure validation
+- Application accessibility
+- Database connectivity
+- Tenant operations
+- AWS component verification
 
-### Test 2: Application Accessibility
-
+### Manual Testing
 ```bash
 # Test health endpoint
-curl -f http://$(terraform output -raw ec2_public_ip)/health
+curl http://$(tofu output -raw ec2_public_ip)/health
 
-# Expected: HTTP 200 with JSON response
-```
-
-**✅ Requirement:** Application must be accessible via URL
-
-### Test 3: Database Connection
-
-```bash
-# SSH into EC2
-ssh -i terraform/django-server-key.pem ubuntu@$(terraform output -raw ec2_public_ip)
-
-# Test PostgreSQL connection
-python3 << 'EOF'
-from models import db
-from app import app
-
-with app.app_context():
-    result = db.session.execute("SELECT 1")
-    print("✓ Database connection successful!")
-EOF
-```
-
-**✅ Requirement:** Database must be accessible from EC2
-
-### Test 4: Tenant Isolation
-
-```bash
-# Create two tenants
-curl -X POST http://$APP_URL/admin/tenants \
+# Create test tenant
+curl -X POST http://$(tofu output -raw ec2_public_ip)/admin/tenants \
   -H "Content-Type: application/json" \
-  -d '{"tenant_id":"LAB001","company_name":"Lab A"}'
+  -d '{"tenant_id":"TEST001","company_name":"Test Lab"}'
 
-curl -X POST http://$APP_URL/admin/tenants \
-  -H "Content-Type: application/json" \
-  -d '{"tenant_id":"LAB002","company_name":"Lab B"}'
-
-# Verify isolation at database level
-ssh -i terraform/django-server-key.pem ubuntu@$EC2_IP
-
-# Check schemas exist
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U postgres -d labcloud -c "\dn"
-
-# Verify LAB001 cannot access LAB002 data
-PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -U postgres -d labcloud -c "SET search_path TO lab001; SELECT * FROM lab002.lab_results;"
-# Expected: ERROR: permission denied for schema lab002
+# List tenants
+curl http://$(tofu output -raw ec2_public_ip)/admin/tenants
 ```
 
-**✅ Requirement:** Tenant A cannot access Tenant B data
+## 🔌 API Reference
 
-### Test 5: All Components Present
+### Public Endpoints
+- `GET /` - Application information
+- `GET /health` - Health check with database status
 
-Check that all required components are running:
+### Admin Endpoints
+- `POST /admin/tenants` - Create new tenant
+- `GET /admin/tenants` - List all tenants
+- `GET /admin/tenants/<id>` - Get tenant details
 
-```bash
-# Check EC2
-aws ec2 describe-instances --filters "Name=tag:Name,Values=tenant-lab-flask-server" --query "Reservations[].Instances[].State.Name"
-# Expected: ["running"]
-
-# Check RDS
-aws rds describe-db-instances --db-instance-identifier tenant-lab-db --query "DBInstances[].DBInstanceStatus"
-# Expected: ["available"]
-
-# Check S3
-aws s3 ls s3://tenant-lab-bucket
-# Expected: No errors
-
-# Check Cognito
-aws cognito-idp describe-user-pool --user-pool-id $(terraform output -raw cognito_user_pool_id)
-# Expected: User pool details
-
-# Check Security Groups
-aws ec2 describe-security-groups --filters "Name=group-name,Values=tenant-lab-ec2-sg"
-# Expected: Security group details
-```
-
-**✅ Requirement:** All components must be present and operational
+### Tenant API Endpoints
+- `POST /api/v1/results` - Create lab result (Cognito required)
+- `GET /api/v1/results/<patient_id>` - Get patient results (Cognito required)
+- `POST /api/v1/upload` - Upload file to S3 (Cognito required)
 
 ## 🔧 Troubleshooting
 
-### Problem: "terraform apply" fails
+### Common Issues
 
-**Solution:**
+**Application not accessible:**
 ```bash
-# Check AWS credentials
-aws sts get-caller-identity
-
-# Check region is correct
-aws configure get region
-
-# Validate Terraform files
-terraform validate
-
-# Check for syntax errors
-terraform fmt -recursive
-```
-
-### Problem: Health check returns 503
-
-**Possible causes:**
-1. Flask service not started
-2. Database connection failed
-3. Nginx misconfigured
-
-**Solution:**
-```bash
-# SSH into EC2
-ssh -i terraform/django-server-key.pem ubuntu@$EC2_IP
-
-# Check Flask service
+ssh -i terraform/tenant-lab-key.pem ubuntu@$(tofu output -raw ec2_public_ip)
 sudo systemctl status labcloud
 sudo journalctl -u labcloud -n 50
-
-# Check database connection
-PGPASSWORD=$DB_PASSWORD psql -h $RDS_ENDPOINT -U postgres -d labcloud -c "SELECT 1"
-
-# Restart services
-sudo systemctl restart labcloud
-sudo systemctl restart nginx
 ```
 
-### Problem: Cannot connect to EC2 via SSH
-
-**Solution:**
+**Database connection issues:**
 ```bash
-# Check security group allows SSH from your IP
-aws ec2 describe-security-groups \
-  --group-ids $(terraform output -raw ec2_security_group_id) \
-  --query "SecurityGroups[].IpPermissions[?FromPort==\`22\`]"
-
-# Verify key permissions
-chmod 400 terraform/django-server-key.pem
-
-# Try connecting with verbose output
-ssh -v -i terraform/django-server-key.pem ubuntu@$EC2_IP
+PGPASSWORD='lAbTeNaNt!' psql -h $(tofu output -raw rds_endpoint) -U postgres -d labcloud -c "SELECT 1;"
 ```
 
-### Problem: RDS connection timeout
+**Deployment script fails:**
+- Use Git Bash on Windows instead of PowerShell
+- Ensure AWS credentials are configured
+- Check Terraform state exists
 
-**Solution:**
-```bash
-# Verify RDS is in correct security group
-aws rds describe-db-instances \
-  --db-instance-identifier tenant-lab-db \
-  --query "DBInstances[].VpcSecurityGroups"
+### Log Files
+- **Application**: `sudo journalctl -u labcloud -f`
+- **Nginx**: `sudo tail -f /var/log/nginx/error.log`
+- **Bootstrap**: `sudo tail -f /var/log/user-data.log`
 
-# Check EC2 can reach RDS
-ssh -i terraform/django-server-key.pem ubuntu@$EC2_IP
-nc -zv $RDS_ENDPOINT 5432
+---
+
+**Deployment Time**: 20-30 minutes  
+**Monthly Cost**: $4-30 (Free Tier to production)  
+**Tenant Capacity**: 50+ laboratories  
 ```
 
-## 💰 Cost Analysis
-
-### Monthly Cost Breakdown (us-east-2)
-
-| Service | Configuration | Monthly Cost |
-|---------|--------------|--------------|
-| **EC2 t3.micro** | 1 instance (750h free tier) | $0 - $8.50 |
-| **RDS db.t3.micro** | PostgreSQL 16, 20GB (750h free tier) | $0 - $15.33 |
-| **EBS (RDS)** | 20GB gp3 | $1.60 |
-| **S3** | 50GB storage, minimal requests | $1.15 |
-| **Elastic IP** | 1 IP attached | $0 |
-| **Data Transfer** | ~10GB out | $0.90 |
-| **Cognito** | < 50K MAU | Free |
-| **CloudWatch** | Basic monitoring | Free |
-| **Total (Free Tier)** | | **~$3-5/month** |
-| **Total (After Free Tier)** | | **~$27-30/month** |
-
-### Cost per Tenant
-
-For 50 tenants:
-- **Infrastructure**: $27/month
-- **Per tenant**: $0.54/month infrastructure cost
-- **Subscription fee**: $299/month
-- **Profit margin**: ~99.8%
-
-### Scaling Economics
-
-| Tenants | Infrastructure | Cost/Tenant | Break-even |
-|---------|---------------|-------------|------------|
-| 10 | $27/month | $2.70 | 1 tenant @ $299/mo |
-| 50 | $27/month | $0.54 | 1 tenant @ $299/mo |
-| 100 | $60/month* | $0.60 | 1 tenant @ $299/mo |
-
-*Requires upgrading to db.t3.small at ~100 tenants
-
-## 📊 Evaluation Checklist
-
-- [x] **Repository Structure** - Organized with terraform/, app/, docs/
-- [x] **ARCHITECTURE.md** - Complete architectural documentation
-- [x] **Terraform Validate** - All `.tf` files pass validation
-- [x] **Terraform Apply** - Deploys without errors
-- [x] **Application Accessible** - URL returns HTTP 200
-- [x] **All Components Present** - EC2, RDS, S3, Cognito, IAM
-- [x] **Data Isolation** - Schema-based isolation implemented
-- [x] **Tenant Provisioning** - Automated via API
-- [x] **Usage Tracking** - Per-tenant metrics in database
-- [x] **Billing System** - Monthly invoice calculation
-- [x] **Security** - Encryption, IAM roles, security groups
-- [x] **Documentation** - README, ARCHITECTURE, code comments
-
-## 🎯 Next Steps
-
-1. **Enable HTTPS**: Add ACM certificate and configure ALB
-2. **CI/CD Pipeline**: Automate deployments with GitHub Actions
-3. **Monitoring**: Set up CloudWatch dashboards and alarms
-4. **Backups**: Configure automated RDS snapshots
-5. **Multi-Region**: Deploy to additional regions for HA
-6. **API Gateway**: Add API Gateway for rate limiting
-7. **WAF**: Add AWS WAF for DDoS protection
-
-## 📞 Support
-
-For issues or questions:
-- Check [Troubleshooting](#troubleshooting) section
-- Review logs: `/var/log/user-data.log`
-- Check service status: `systemctl status labcloud`
-
-## 📄 License
-
-MIT License
