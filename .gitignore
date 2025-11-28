@@ -22,15 +22,15 @@ instance/
 *.sqlite
 *.sqlite3
 
-# Terraform
-terraform/.terraform/
-terraform/.terraform.lock.hcl
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/*.tfvars
-terraform/crash.log
-terraform/*.pem
+# Terraform - Directorios y archivos temporales
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
 *.pem
+tenant-lab-key.pem
 
 # IDE
 .vscode/

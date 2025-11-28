@@ -6,7 +6,7 @@
 - [Overview](#overview)
 - [Quick Start](#quick-start)
 - [Prerequisites](#prerequisites)
-- [Deployment Guide](#deployment-guide)
+- [Manual Deployment Guide](#manual-deployment-guide)
 - [Testing](#testing)
 - [Billing System](#billing-system)
 - [API Reference](#api-reference)
@@ -16,7 +16,7 @@
 
 LabCloud is a multi-tenant SaaS platform that allows small laboratories to:
 - Store and manage lab results securely
-- Provide patient-facing portals
+- Provide patient-facing portals  
 - Track usage and billing per tenant
 - Scale to 50+ laboratory clients on shared infrastructure
 
@@ -32,7 +32,7 @@ LabCloud is a multi-tenant SaaS platform that allows small laboratories to:
 
 ### 1. Clone Repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/AMR14-eng/AWSProject.git
 cd AWSProject
 ```
 
@@ -44,15 +44,8 @@ tofu validate
 tofu apply
 ```
 
-### 3. Deploy Application
-```bash
-./scripts/deploy.sh
-```
-
-### 4. Run Tests
-```bash
-./scripts/test-labcloud.sh
-```
+### 3. Deploy Application (Manual)
+Follow the [Manual Deployment Guide](#manual-deployment-guide) below.
 
 ## 📋 Prerequisites
 
@@ -67,11 +60,9 @@ tofu apply
 - AWS credentials configured (`aws configure`)
 - Default region set to `us-east-2`
 
-## 📚 Deployment Guide
+## 📚 Manual Deployment Guide
 
-### Step-by-Step Deployment
-
-1. **Infrastructure Setup**
+### Step 1: Deploy Infrastructure with Terraform
 ```bash
 cd terraform
 tofu init
@@ -79,39 +70,196 @@ tofu plan
 tofu apply
 ```
 
-2. **Application Deployment**
+Save the outputs, especially:
+- `ec2_public_ip` - Your EC2 instance IP
+- `rds_endpoint` - Database connection string
+
+### Step 2: Access Your EC2 Instance
 ```bash
-./scripts/deploy.sh
+ssh -i terraform/tenant-lab-key.pem ubuntu@YOUR_EC2_IP
 ```
 
-3. **Verification**
+### Step 3: Clone and Setup Application on EC2
 ```bash
-./scripts/test-labcloud.sh
+# On the EC2 instance:
+sudo mkdir -p /opt
+cd /opt
+sudo git clone https://github.com/AMR14-eng/AWSProject.git labcloud
+cd labcloud
 ```
 
-### Deployment Outputs
-After successful deployment, you'll get:
-- **Application URL**: `http://YOUR_EC2_IP`
-- **Health Check**: `http://YOUR_EC2_IP/health`
-- **SSH Access**: `ssh -i tenant-lab-key.pem ubuntu@YOUR_EC2_IP`
+### Step 4: Install Dependencies
+```bash
+# Update system and install dependencies
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv nginx postgresql-client
+
+# Install Python packages
+sudo pip3 install -r requirements.txt
+```
+
+### Step 5: Configure Environment
+```bash
+# Create environment file from template
+cp .env.example .env
+
+# Edit with your actual values from Terraform outputs
+sudo nano .env
+```
+
+**Required .env variables:**
+```bash
+# Database (from Terraform outputs)
+DB_HOST=your-rds-endpoint
+DB_PORT=5432
+DB_NAME=labcloud
+DB_USER=postgres
+DB_PASSWORD=your-db-password
+
+# AWS (from Terraform outputs)
+AWS_REGION=us-east-2
+S3_BUCKET=your-s3-bucket-name
+COGNITO_POOL_ID=your-cognito-pool-id
+COGNITO_APP_CLIENT_ID=your-cognito-client-id
+
+# Flask
+FLASK_APP=wsgi:app
+FLASK_ENV=production
+SECRET_KEY=your-generated-secret-key
+```
+
+### Step 6: Configure System Services
+
+**Create Systemd Service:**
+```bash
+sudo tee /etc/systemd/system/labcloud.service > /dev/null << 'EOF'
+[Unit]
+Description=LabCloud Flask Application
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/opt/labcloud
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/labcloud/.env
+ExecStart=/usr/local/bin/gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 wsgi:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+**Configure Nginx:**
+```bash
+sudo tee /etc/nginx/sites-available/labcloud > /dev/null << 'EOF'
+server {
+    listen 80;
+    server_name _;
+
+    # Serve frontend static files
+    location / {
+        root /opt/labcloud/frontend;
+        index index.html;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API requests to Flask backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Proxy admin requests
+    location /admin/ {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Health check
+    location /health {
+        proxy_pass http://127.0.0.1:5000/health;
+        access_log off;
+    }
+}
+EOF
+```
+
+### Step 7: Enable and Start Services
+```bash
+# Enable site
+sudo ln -sf /etc/nginx/sites-available/labcloud /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Test Nginx configuration
+sudo nginx -t
+
+# Start services
+sudo systemctl daemon-reload
+sudo systemctl enable labcloud
+sudo systemctl start labcloud
+sudo systemctl enable nginx
+sudo systemctl restart nginx
+```
+
+### Step 8: Initialize Database
+```bash
+cd /opt/labcloud
+sudo python3 -c "
+from app import app, db
+with app.app_context():
+    db.create_all()
+    print('Database tables created successfully!')
+"
+```
+
+### Step 9: Verify Deployment
+```bash
+# Check services are running
+sudo systemctl status labcloud
+sudo systemctl status nginx
+
+# Test health endpoint
+curl http://localhost/health
+
+# Test frontend
+curl -I http://localhost/
+```
+
+## 🚀 Updates and Maintenance
+
+### Update Application (When Code Changes)
+```bash
+# On EC2 instance:
+cd /opt/labcloud
+sudo git pull
+sudo systemctl restart labcloud
+```
+
+### View Logs
+```bash
+# Application logs
+sudo journalctl -u labcloud -f
+
+# Nginx logs
+sudo tail -f /var/log/nginx/error.log
+
+# Real-time application logs
+sudo tail -f /var/log/labcloud.log
+```
 
 ## 💰 Billing System
-
-### Overview
-The platform includes automated usage tracking and billing:
-
-**Pricing Structure:**
-- **Base Fee**: $299/month
-- **Included Results**: 1,000 results/month
-- **Overage**: $0.50 per additional result
-- **Storage**: $0.50 per GB/month
-- **API Calls**: $0.10 per 1,000 calls
 
 ### Using the Billing System
 
 **Generate Invoice for Tenant:**
 ```bash
-# SSH into EC2 and run:
 cd /opt/labcloud
 sudo python3 -c "
 from app.billing import calculate_tenant_bill
@@ -139,30 +287,18 @@ with app.app_context():
 
 ## 🧪 Testing
 
-### Automated Test Suite
-```bash
-./scripts/test-labcloud.sh
-```
-
-**Tests Included:**
-- Infrastructure validation
-- Application accessibility
-- Database connectivity
-- Tenant operations
-- AWS component verification
-
 ### Manual Testing
 ```bash
 # Test health endpoint
-curl http://$(tofu output -raw ec2_public_ip)/health
+curl http://YOUR_EC2_IP/health
 
 # Create test tenant
-curl -X POST http://$(tofu output -raw ec2_public_ip)/admin/tenants \
+curl -X POST http://YOUR_EC2_IP/admin/tenants \
   -H "Content-Type: application/json" \
   -d '{"tenant_id":"TEST001","company_name":"Test Lab"}'
 
 # List tenants
-curl http://$(tofu output -raw ec2_public_ip)/admin/tenants
+curl http://YOUR_EC2_IP/admin/tenants
 ```
 
 ## 🔌 API Reference
@@ -173,7 +309,7 @@ curl http://$(tofu output -raw ec2_public_ip)/admin/tenants
 
 ### Admin Endpoints
 - `POST /admin/tenants` - Create new tenant
-- `GET /admin/tenants` - List all tenants
+- `GET /admin/tenants` - List all tenants  
 - `GET /admin/tenants/<id>` - Get tenant details
 
 ### Tenant API Endpoints
@@ -187,30 +323,41 @@ curl http://$(tofu output -raw ec2_public_ip)/admin/tenants
 
 **Application not accessible:**
 ```bash
-ssh -i terraform/tenant-lab-key.pem ubuntu@$(tofu output -raw ec2_public_ip)
+ssh -i terraform/tenant-lab-key.pem ubuntu@YOUR_EC2_IP
 sudo systemctl status labcloud
 sudo journalctl -u labcloud -n 50
 ```
 
 **Database connection issues:**
 ```bash
-PGPASSWORD='lAbTeNaNt!' psql -h $(tofu output -raw rds_endpoint) -U postgres -d labcloud -c "SELECT 1;"
+# Test database connection
+PGPASSWORD='your-db-password' psql -h YOUR_RDS_ENDPOINT -U postgres -d labcloud -c "SELECT 1;"
 ```
 
-**Deployment script fails:**
-- Use Git Bash on Windows instead of PowerShell
-- Ensure AWS credentials are configured
-- Check Terraform state exists
+**Nginx configuration errors:**
+```bash
+sudo nginx -t
+sudo tail -f /var/log/nginx/error.log
+```
 
-### Log Files
-- **Application**: `sudo journalctl -u labcloud -f`
-- **Nginx**: `sudo tail -f /var/log/nginx/error.log`
-- **Bootstrap**: `sudo tail -f /var/log/user-data.log`
+### Service Management
+```bash
+# Restart application
+sudo systemctl restart labcloud
+
+# Restart Nginx
+sudo systemctl restart nginx
+
+# Check service status
+sudo systemctl status labcloud
+sudo systemctl status nginx
+```
 
 ---
 
-**Deployment Time**: 20-30 minutes  
+**Deployment Time**: 15-20 minutes  
 **Monthly Cost**: $4-30 (Free Tier to production)  
 **Tenant Capacity**: 50+ laboratories  
-```
+**Update Method**: `git pull && systemctl restart labcloud`
 
+For questions or issues, check the application logs with `sudo journalctl -u labcloud -f`
