@@ -72,6 +72,7 @@ def serve_static_files(path):
     except Exception as e:
         return jsonify({"error": "File not found", "details": str(e)}), 404
 
+
 @app.route("/health")
 def health():
     """Health check endpoint for ALB"""
