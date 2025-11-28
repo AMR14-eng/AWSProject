@@ -1,14 +1,15 @@
-from flask import Flask, request, jsonify, g
+from flask import Flask, request, jsonify, g, send_from_directory
 from flask_migrate import Migrate
 from flask_cors import CORS
 from app.config import Config
 from app.models import db, Tenant, UserProfile, LabResult
 from app.auth import cognito_required, verify_jwt
 from app.s3client import upload_bytes
-from usage import incr_results_processed, incr_api_calls
+from app.usage import incr_results_processed, incr_api_calls
 from app.provisioner import provision_tenant
 import time
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -43,24 +44,42 @@ def attach_tenant_from_header():
     g.tenant_id = tenant_id
 
 @app.route("/")
-def home():
-    """Root endpoint"""
-    return jsonify({
-        "message": "LabCloud Flask API",
-        "version": "1.0.0",
-        "endpoints": {
-            "health": "/health",
-            "admin": "/admin/tenants",
-            "api": "/api/v1"
-        }
-    })
+def serve_frontend():
+    """Sirve el frontend (index.html)"""
+    try:
+        # Ruta al directorio frontend
+        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+        return send_from_directory(frontend_path, 'index.html')
+    except Exception as e:
+        # Fallback: mostrar info del API si el frontend no está disponible
+        return jsonify({
+            "message": "LabCloud Flask API - Frontend not available",
+            "error": str(e),
+            "version": "1.0.0",
+            "endpoints": {
+                "health": "/health",
+                "admin": "/admin/tenants", 
+                "api": "/api/v1"
+            }
+        }), 500
+
+@app.route("/<path:path>")
+def serve_static_files(path):
+    """Sirve archivos estáticos (CSS, JS, imágenes)"""
+    try:
+        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+        return send_from_directory(frontend_path, path)
+    except Exception as e:
+        return jsonify({"error": "File not found", "details": str(e)}), 404
+
 
 @app.route("/health")
 def health():
     """Health check endpoint for ALB"""
     try:
         # Check database connection
-        db.session.execute("SELECT 1")
+        from sqlalchemy import text
+        db.session.execute(text("SELECT 1"))
         db_status = "healthy"
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
