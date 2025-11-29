@@ -48,7 +48,7 @@ def serve_frontend():
     """Sirve el frontend (index.html)"""
     try:
         # Ruta al directorio frontend
-        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'public')
         return send_from_directory(frontend_path, 'index.html')
     except Exception as e:
         # Fallback: mostrar info del API si el frontend no está disponible
