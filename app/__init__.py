@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, g, send_from_directory
+from flask import Flask, request, jsonify, g, send_from_directory, Response
 from flask_migrate import Migrate
 from flask_cors import CORS
 from app.config import Config
