@@ -338,24 +338,35 @@
                 
                 console.log('📡 Haciendo request a:', url);
                 
-                const response = await fetch(url, {
-                    headers: {
-                        'X-Tenant-Id': currentTenant
-                    }
-                });
+                // Obtener el token JWT de la sesión de Cognito
+                const idToken = currentSession?.getIdToken()?.getJwtToken();
                 
-                console.log('Response status:', response.status);
+                const headers = {
+                    'X-Tenant-Id': currentTenant
+                };
+                
+                // Agregar Authorization header si hay token
+                if (idToken) {
+                    headers['Authorization'] = `Bearer ${idToken}`;
+                }
+                
+                console.log('🔑 Headers:', headers);
+                
+                const response = await fetch(url, { headers });
+                
+                console.log('📋 Response status:', response.status);
                 
                 if (!response.ok) {
-                    throw new Error('Error cargando resultados');
+                    throw new Error(`Error ${response.status}: ${await response.text()}`);
                 }
                 
                 const data = await response.json();
+                console.log('✅ Datos recibidos:', data);
                 displayResults(data.results || []);
             } catch (error) {
-                console.error('Error:', error);
+                console.error('❌ Error cargando resultados:', error);
                 document.getElementById('resultsList').innerHTML = 
-                    '<p>Error cargando resultados. Verifica la consola.</p>';
+                    `<div class="error">Error cargando resultados: ${error.message}</div>`;
             }
         }
 
