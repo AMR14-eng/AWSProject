@@ -145,119 +145,6 @@
     </div>
 
     <script>
-        // Agrega esto al inicio de tu script para depuración
-        console.log('Frontend cargado');
-        console.log('Config:', window.CONFIG);
-
-        // En la función loginWithCognito, agrega logs:
-        async function loginWithCognito(username, password) {
-            console.log('Intentando login con:', username);
-            try {
-                const authenticationData = {
-                    Username: username,
-                    Password: password,
-                };
-                
-                const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
-                
-                const userData = {
-                    Username: username,
-                    Pool: userPool
-                };
-                
-                const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
-                
-                return new Promise((resolve, reject) => {
-                    cognitoUser.authenticateUser(authenticationDetails, {
-                        onSuccess: function (result) {
-                            console.log('✅ Login exitoso', result);
-                            currentSession = result;
-                            currentUser = cognitoUser;
-                            
-                            // Obtener los atributos del usuario para sacar el tenant_id
-                            cognitoUser.getUserAttributes(function(err, attributes) {
-                                console.log('Obteniendo atributos del usuario...');
-                                if (err) {
-                                    console.error('❌ Error obteniendo atributos:', err);
-                                    reject(err);
-                                    return;
-                                }
-                                
-                                console.log('Atributos del usuario:', attributes);
-                                
-                                // Buscar el tenant_id en los atributos
-                                const tenantAttr = attributes.find(attr => attr.getName() === 'custom:tenant_id');
-                                currentTenant = tenantAttr ? tenantAttr.getValue() : 'unknown';
-                                console.log('Tenant ID encontrado:', currentTenant);
-                                
-                                resolve({
-                                    user: cognitoUser,
-                                    session: result,
-                                    tenant: currentTenant
-                                });
-                            });
-                        },
-                        onFailure: function(err) {
-                            console.error('❌ Error en login:', err);
-                            reject(err);
-                        },
-                        newPasswordRequired: function(userAttributes, requiredAttributes) {
-                            console.log('🔐 Nueva contraseña requerida ');
-                            // Guardar el usuario para el cambio de contraseña
-                            currentUser = cognitoUser;
-                            
-                            // MOSTRAR directamente la pantalla de cambio de contraseña
-                            // No rechazar la promesa, simplemente mostrar la UI
-                            document.getElementById('loginScreen').classList.add('hidden');
-                            document.getElementById('changePasswordScreen').classList.remove('hidden');
-                            
-                            // Resolver con un objeto especial que indique que se necesita cambio de contraseña
-                            resolve({
-                                needsPasswordChange: true,
-                                user: cognitoUser,
-                                userAttributes: userAttributes
-                            });
-                        }
-                    });
-                });
-                
-            } catch (error) {
-                console.error('❌ Error general en login:', error);
-                throw error;
-            }
-        }
-
-        // En el event listener del login, agrega más logs:
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            console.log('Formulario de login enviado');
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-            
-            // Limpiar errores anteriores
-            document.getElementById('loginError').classList.add('hidden');
-            
-            try {
-                const result = await loginWithCognito(username, password);
-                console.log('Resultado del login:', result);
-                
-                if (result.needsPasswordChange) {
-                    console.log('🔐 Usuario necesita cambiar contraseña - Mostrando pantalla');
-                    // Guardar el usuario globalmente para usarlo en completeNewPassword
-                    currentUser = result.user;
-                    // Ocultar login y mostrar pantalla de cambio de contraseña
-                    document.getElementById('loginScreen').classList.add('hidden');
-                    document.getElementById('changePasswordScreen').classList.remove('hidden');
-                } else {
-                    console.log('✅ Login completado, mostrando dashboard...');
-                    showDashboard(result.tenant);
-                }
-            } catch (error) {
-                console.error('❌ Error en proceso de login:', error);
-                showError('loginError', 'Error de login: ' + error.message);
-            }
-        });
-
         // Configuración de Cognito
         const poolData = {
             UserPoolId: 'us-east-2_Wi7VHkSWm', 
@@ -271,8 +158,9 @@
         let currentSession = null;
         let currentTenant = null;
 
-        // Login REAL con Cognito
+        // Login REAL con Cognito - ÚNICA VERSIÓN
         async function loginWithCognito(username, password) {
+            console.log('🔐 Intentando login con:', username);
             try {
                 const authenticationData = {
                     Username: username,
@@ -325,7 +213,6 @@
                         newPasswordRequired: function(userAttributes, requiredAttributes) {
                             console.log('🔐 Nueva contraseña requerida - Cambiando a pantalla de cambio');
                             
-                            // NO usar reject() aquí - en su lugar, resolver con un flag especial
                             resolve({
                                 needsPasswordChange: true,
                                 user: cognitoUser,
@@ -347,7 +234,12 @@
             const newPassword = document.getElementById('newPassword').value;
             
             if (!newPassword) {
-                alert('Por favor ingresa una nueva contraseña');
+                showError('changePasswordError', 'Por favor ingresa una nueva contraseña');
+                return;
+            }
+
+            if (newPassword.length < 8) {
+                showError('changePasswordError', 'La contraseña debe tener al menos 8 caracteres');
                 return;
             }
 
@@ -379,24 +271,44 @@
                 },
                 onFailure: function(err) {
                     console.error('❌ Error cambiando contraseña:', err);
-                    showError('changePasswordError', 'Error cambiando contraseña: ' + err.message);
+                    let errorMsg = 'Error cambiando contraseña: ' + err.message;
+                    
+                    if (err.message.includes('Password does not conform')) {
+                        errorMsg = 'La contraseña no cumple los requisitos. Debe tener mayúsculas, minúsculas, números y al menos 8 caracteres.';
+                    }
+                    
+                    showError('changePasswordError', errorMsg);
                 }
             });
         }
 
         // Mostrar dashboard
         function showDashboard(tenantId) {
-            document.getElementById('loginScreen').classList.add('hidden');
-            document.getElementById('changePasswordScreen').classList.add('hidden');
-            document.getElementById('dashboard').classList.remove('hidden');
-            
-            const tenantName = tenantId === 'laba' ? 'Laboratorio A' : 
-                             tenantId === 'labb' ? 'Laboratorio B' : tenantId;
-            
-            document.getElementById('tenantName').textContent = tenantName;
-            
-            // Cargar resultados iniciales
-            loadResults();
+            console.log('🎯 Mostrando dashboard para tenant:', tenantId);
+            try {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('changePasswordScreen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                
+                const tenantName = tenantId === 'laba' ? 'Laboratorio A' : 
+                                tenantId === 'labb' ? 'Laboratorio B' : tenantId;
+                
+                document.getElementById('tenantName').textContent = tenantName;
+                console.log('✅ Dashboard mostrado correctamente');
+                
+                // TEMPORAL: Mensaje de bienvenida en lugar de cargar resultados (evita 404)
+                document.getElementById('resultsList').innerHTML = `
+                    <div style="background: #d1ecf1; padding: 15px; border-radius: 5px;">
+                        <h4>✅ ¡Bienvenido a LabCloud!</h4>
+                        <p><strong>Tenant:</strong> ${tenantName}</p>
+                        <p><strong>Usuario:</strong> ${currentUser ? currentUser.username : 'N/A'}</p>
+                        <p><em>La funcionalidad de resultados estará disponible pronto.</em></p>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('❌ Error en showDashboard:', error);
+            }
         }
 
         // Cargar resultados desde tu API
@@ -407,11 +319,15 @@
                     url = `${API_URL}/api/v1/results/${patientId}`;
                 }
                 
+                console.log('📡 Haciendo request a:', url);
+                
                 const response = await fetch(url, {
                     headers: {
                         'X-Tenant-Id': currentTenant
                     }
                 });
+                
+                console.log('Response status:', response.status);
                 
                 if (!response.ok) {
                     throw new Error('Error cargando resultados');
@@ -511,23 +427,37 @@
             loadResults(patientId);
         }
 
-        // Event Listeners
+        // Event Listener CORREGIDO
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
+            console.log('📝 Formulario de login enviado');
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
+            // Limpiar errores anteriores
+            document.getElementById('loginError').classList.add('hidden');
+            
             try {
                 const result = await loginWithCognito(username, password);
-                showDashboard(result.tenant);
-            } catch (error) {
-                if (error.message !== 'newPasswordRequired') {
-                    showError('loginError', 'Error de login: ' + error.message);
+                console.log('🔍 Resultado del login:', result);
+                
+                if (result.needsPasswordChange) {
+                    console.log('🔐 MOSTRANDO pantalla de cambio de contraseña');
+                    currentUser = result.user;
+                    document.getElementById('loginScreen').classList.add('hidden');
+                    document.getElementById('changePasswordScreen').classList.remove('hidden');
+                    console.log('✅ Pantalla de cambio de contraseña ACTIVADA');
+                } else {
+                    console.log('✅ Login normal - mostrando dashboard');
+                    showDashboard(result.tenant);
                 }
+            } catch (error) {
+                console.error('❌ Error en proceso de login:', error);
+                showError('loginError', 'Error de login: ' + error.message);
             }
         });
 
-        console.log('LabCloud Frontend con Cognito REAL cargado');
+        console.log('✅ LabCloud Frontend cargado - Versión corregida');
     </script>
 </body>
 </html>
