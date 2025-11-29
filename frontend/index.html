@@ -145,16 +145,14 @@
     <script src="/config.js"></script>
 
     <script>
-        // Configuración de Cognito desde variables .env
-    console.log('Config cargada:', window.CONFIG);
-    
-    const poolData = {
-        UserPoolId: window.CONFIG.COGNITO_POOL_ID,
-        ClientId: window.CONFIG.COGNITO_APP_CLIENT_ID
-    };
-    
-    const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
-    const API_URL = window.CONFIG.API_URL;
+        // Configuración de Cognito
+        const poolData = {
+            UserPoolId: 'us-east-2_Wi7VHkSWm', 
+            ClientId: '4f542vcmv892f5nlpjh6ve8b1v' 
+        };
+        
+        const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+        const API_URL = 'http://localhost:5000';
         
         let currentUser = null;
         let currentSession = null;

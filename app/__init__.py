@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, g, send_from_directory, Response
+from flask import Flask, request, jsonify, g, send_from_directory
 from flask_migrate import Migrate
 from flask_cors import CORS
 from app.config import Config
@@ -43,18 +43,6 @@ def attach_tenant_from_header():
                 tenant_id = None
     g.tenant_id = tenant_id
 
-@app.route("/config.js")
-def serve_config():
-    """Sirve la configuración JavaScript para el frontend"""
-    config_js = f"""
-window.CONFIG = {{
-    COGNITO_POOL_ID: '{os.getenv("COGNITO_POOL_ID", "")}',
-    COGNITO_APP_CLIENT_ID: '{os.getenv("COGNITO_APP_CLIENT_ID", "")}',
-    API_URL: '{os.getenv("API_URL", "http://localhost:5000")}'
-}};
-console.log('Configuración cargada:', window.CONFIG);
-"""
-    return Response(config_js, mimetype='application/javascript')
 
 @app.route("/")
 def serve_frontend():
