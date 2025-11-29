@@ -1,4 +1,4 @@
-# create_tenant_users.py - VERSIÓN INDEPENDIENTE
+# create_tenant_users_fixed.py
 import boto3
 import os
 from dotenv import load_dotenv
@@ -9,8 +9,23 @@ from psycopg2.extras import RealDictCursor
 load_dotenv()
 
 def create_tenant_users():
-    # Configuración desde .env
-    cognito = boto3.client('cognito-idp', region_name=os.getenv('AWS_REGION', 'us-east-2'))
+    print("🔍 Leyendo variables de entorno...")
+    
+    # Usa COGNITO_POOL_ID (que ya tienes) en lugar de COGNITO_USER_POOL_ID
+    user_pool_id = os.getenv('COGNITO_POOL_ID') or os.getenv('COGNITO_USER_POOL_ID')
+    client_id = os.getenv('COGNITO_APP_CLIENT_ID') or os.getenv('COGNITO_CLIENT_ID')
+    region = os.getenv('AWS_REGION', 'us-east-2')
+    
+    print(f"User Pool ID: {user_pool_id}")
+    print(f"Client ID: {client_id}")
+    print(f"Region: {region}")
+    
+    if not user_pool_id:
+        print("❌ ERROR: No se encontró COGNITO_POOL_ID o COGNITO_USER_POOL_ID en .env")
+        return
+    
+    # Configuración de Cognito
+    cognito = boto3.client('cognito-idp', region_name=region)
     
     # Configuración de la base de datos
     db_config = {
@@ -38,16 +53,21 @@ def create_tenant_users():
     for tenant_data in tenants:
         print(f"\n--- Procesando {tenant_data['tenant_id']} ---")
         
-        # 1. Crear tenant en PostgreSQL
+        # 1. Verificar si el tenant ya existe en PostgreSQL
         try:
-            cur.execute("""
-                INSERT INTO tenants (tenant_id, company_name, subscription_tier) 
-                VALUES (%s, %s, %s)
-                ON CONFLICT (tenant_id) DO NOTHING
-            """, (tenant_data['tenant_id'], tenant_data['company_name'], 'professional'))
+            cur.execute("SELECT tenant_id FROM tenants WHERE tenant_id = %s", (tenant_data['tenant_id'],))
+            existing_tenant = cur.fetchone()
             
-            conn.commit()
-            print(f"✅ Tenant creado/encontrado en DB: {tenant_data['tenant_id']}")
+            if existing_tenant:
+                print(f"✅ Tenant ya existe en DB: {tenant_data['tenant_id']}")
+            else:
+                cur.execute("""
+                    INSERT INTO tenants (tenant_id, company_name, subscription_tier) 
+                    VALUES (%s, %s, %s)
+                """, (tenant_data['tenant_id'], tenant_data['company_name'], 'professional'))
+                conn.commit()
+                print(f"✅ Tenant creado en DB: {tenant_data['tenant_id']}")
+                
         except Exception as e:
             print(f"❌ Error con la base de datos: {e}")
             conn.rollback()
@@ -57,7 +77,7 @@ def create_tenant_users():
         email = f"user@{tenant_data['tenant_id']}.com"
         try:
             response = cognito.admin_create_user(
-                UserPoolId=os.getenv('COGNITO_USER_POOL_ID'),
+                UserPoolId=user_pool_id,
                 Username=email,
                 TemporaryPassword='TempPassword123!',
                 MessageAction='SUPPRESS',
