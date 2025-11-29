@@ -265,7 +265,7 @@
         };
         
         const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
-        const API_URL = 'http://localhost:5000';
+        const API_URL = 'http://3.137.123.210:5000';
         
         let currentUser = null;
         let currentSession = null;
@@ -486,7 +486,7 @@
             element.textContent = message;
             element.classList.remove('hidden');
         }
-        
+
         function showStatus(elementId, message, type) {
             const element = document.getElementById(elementId);
             element.innerHTML = `<div class="${type}">${message}</div>`;
