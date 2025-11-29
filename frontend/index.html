@@ -112,6 +112,7 @@
                 <input type="password" id="newPassword" required placeholder="Ingresa tu nueva contraseña">
             </div>
             <button onclick="completeNewPassword()">Cambiar Contraseña</button>
+            <!-- AGREGA ESTA LÍNEA -->
             <div id="changePasswordError" class="error hidden"></div>
         </div>
     </div>
@@ -233,14 +234,20 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
+            // Limpiar errores anteriores
+            document.getElementById('loginError').classList.add('hidden');
+            
             try {
                 const result = await loginWithCognito(username, password);
+                console.log('Resultado del login:', result);
                 
-                // Verificar si necesita cambio de contraseña
                 if (result.needsPasswordChange) {
-                    console.log('🔐 Usuario necesita cambiar contraseña');
-                    // Ya se mostró la pantalla de cambio de contraseña en newPasswordRequired
-                    // No hacer nada más aquí
+                    console.log('🔐 Usuario necesita cambiar contraseña - Mostrando pantalla');
+                    // Guardar el usuario globalmente para usarlo en completeNewPassword
+                    currentUser = result.user;
+                    // Ocultar login y mostrar pantalla de cambio de contraseña
+                    document.getElementById('loginScreen').classList.add('hidden');
+                    document.getElementById('changePasswordScreen').classList.remove('hidden');
                 } else {
                     console.log('✅ Login completado, mostrando dashboard...');
                     showDashboard(result.tenant);
@@ -284,41 +291,53 @@
                 return new Promise((resolve, reject) => {
                     cognitoUser.authenticateUser(authenticationDetails, {
                         onSuccess: function (result) {
+                            console.log('✅ Login exitoso', result);
                             currentSession = result;
                             currentUser = cognitoUser;
                             
                             // Obtener los atributos del usuario para sacar el tenant_id
                             cognitoUser.getUserAttributes(function(err, attributes) {
                                 if (err) {
+                                    console.error('❌ Error obteniendo atributos:', err);
                                     reject(err);
                                     return;
                                 }
                                 
+                                console.log('Atributos del usuario:', attributes);
+                                
                                 // Buscar el tenant_id en los atributos
                                 const tenantAttr = attributes.find(attr => attr.getName() === 'custom:tenant_id');
                                 currentTenant = tenantAttr ? tenantAttr.getValue() : 'unknown';
+                                console.log('Tenant ID encontrado:', currentTenant);
                                 
                                 resolve({
                                     user: cognitoUser,
                                     session: result,
-                                    tenant: currentTenant
+                                    tenant: currentTenant,
+                                    needsPasswordChange: false
                                 });
                             });
                         },
                         onFailure: function(err) {
+                            console.error('❌ Error en login:', err);
                             reject(err);
                         },
                         newPasswordRequired: function(userAttributes, requiredAttributes) {
-                            // Guardar el usuario para el cambio de contraseña
-                            currentUser = cognitoUser;
-                            document.getElementById('loginScreen').classList.add('hidden');
-                            document.getElementById('changePasswordScreen').classList.remove('hidden');
-                            reject(new Error('newPasswordRequired'));
+                            console.log('🔐 Nueva contraseña requerida - Cambiando a pantalla de cambio');
+                            
+                            // NO usar reject() aquí - en su lugar, resolver con un flag especial
+                            resolve({
+                                needsPasswordChange: true,
+                                user: cognitoUser,
+                                userAttributes: userAttributes,
+                                requiredAttributes: requiredAttributes
+                            });
                         }
                     });
                 });
                 
             } catch (error) {
+                console.error('❌ Error general en login:', error);
                 throw error;
             }
         }
@@ -332,25 +351,35 @@
                 return;
             }
 
+            // Limpiar errores
+            document.getElementById('changePasswordError').classList.add('hidden');
+
+            console.log('Completando cambio de contraseña...');
+            
             currentUser.completeNewPasswordChallenge(newPassword, {}, {
                 onSuccess: function(result) {
+                    console.log('✅ Contraseña cambiada exitosamente');
                     currentSession = result;
                     
                     // Obtener tenant_id después del cambio de contraseña
                     currentUser.getUserAttributes(function(err, attributes) {
                         if (err) {
-                            showError('loginError', 'Error obteniendo información del usuario');
+                            console.error('Error obteniendo atributos:', err);
+                            showError('changePasswordError', 'Error obteniendo información del usuario');
                             return;
                         }
                         
                         const tenantAttr = attributes.find(attr => attr.getName() === 'custom:tenant_id');
                         currentTenant = tenantAttr ? tenantAttr.getValue() : 'unknown';
+                        console.log('Tenant después de cambio de contraseña:', currentTenant);
                         
+                        // Mostrar dashboard
                         showDashboard(currentTenant);
                     });
                 },
                 onFailure: function(err) {
-                    showError('loginError', 'Error cambiando contraseña: ' + err.message);
+                    console.error('❌ Error cambiando contraseña:', err);
+                    showError('changePasswordError', 'Error cambiando contraseña: ' + err.message);
                 }
             });
         }
@@ -457,7 +486,7 @@
             element.textContent = message;
             element.classList.remove('hidden');
         }
-
+        
         function showStatus(elementId, message, type) {
             const element = document.getElementById(elementId);
             element.innerHTML = `<div class="${type}">${message}</div>`;
