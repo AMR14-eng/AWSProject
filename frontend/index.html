@@ -7,7 +7,6 @@
     <title>LabCloud - Laboratorios</title>
     <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@5.2.11/dist/amazon-cognito-identity.min.js"></script>
     <style>
-        /* (Mantén todos tus estilos actuales) */
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
@@ -63,9 +62,6 @@
             border-radius: 5px;
             margin-bottom: 15px;
         }
-        .hidden {
-            display: none;
-        }
         .nav {
             background: #343a40;
             color: white;
@@ -80,27 +76,19 @@
             border-radius: 5px;
         }
 
-        /* 🔥 ESTILOS CRÍTICOS PARA LAS PANTALLAS */
-        #loginScreen:not(.hidden),
-        #changePasswordScreen:not(.hidden),
-        #dashboard:not(.hidden) {
-            display: block !important;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        /* Estilo específico para la pantalla de cambio de contraseña */
+        /* 🔥 ESTILO ESPECÍFICO para pantalla de cambio de contraseña */
         #changePasswordScreen .login-container {
             border: 3px solid #ffc107 !important;
             background: #fffdf0 !important;
-            position: relative;
         }
+        .hidden {
+            display: none;
+        }
+
     </style>
 </head>
 <body>
-    <!-- LOGIN SCREEN -->
+    <!-- PANTALLA DE LOGIN -->
     <div id="loginScreen" class="login-container">
         <h1>🔬 LabCloud</h1>
         <p>Sistema de Gestión de Laboratorios</p>
@@ -120,32 +108,30 @@
         </form>
         
         <div id="loginError" class="error hidden"></div>
+    </div>
+
+    <!-- ✅ PANTALLA DE CAMBIO DE CONTRASEÑA - SEPARADA -->
+    <div id="changePasswordScreen" class="login-container hidden" style="border: 3px solid #ffc107; background: #fffdf0;">
+        <h3>🔐 Cambio de Contraseña Requerido</h3>
+        <p style="color: #856404; background: #fff3cd; padding: 10px; border-radius: 5px;">
+            <strong id="currentChangingUser">user@laba.com</strong> - Es tu primer acceso. Debes cambiar tu contraseña temporal.
+        </p>
         
-        <!-- PANTALLA DE CAMBIO DE CONTRASEÑA  -->
-        <div id="changePasswordScreen" class="hidden">
-            <div class="login-container" style="border: 3px solid #ffc107; background: #fffdf0;">
-                <h3>🔐 Cambio de Contraseña Requerido</h3>
-                <p style="color: #856404; background: #fff3cd; padding: 10px; border-radius: 5px;">
-                    <strong id="currentChangingUser">user@laba.com</strong> - Es tu primer acceso. Debes cambiar tu contraseña temporal.
-                </p>
-                
-                <div class="form-group">
-                    <label for="newPassword"><strong>Nueva Contraseña:</strong></label>
-                    <input type="password" id="newPassword" required 
-                        placeholder="Mínimo 8 caracteres, con mayúsculas, minúsculas y números"
-                        style="border: 2px solid #007bff; padding: 12px;">
-                    <small style="color: #666; display: block; margin-top: 5px;">
-                        🔒 La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas y números.
-                    </small>
-                </div>
-                
-                <button onclick="completeNewPassword()" style="background: #28a745; padding: 12px 25px;">
-                    ✅ Establecer Nueva Contraseña
-                </button>
-                
-                <div id="changePasswordError" class="error hidden" style="margin-top: 15px;"></div>
-            </div>
+        <div class="form-group">
+            <label for="newPassword"><strong>Nueva Contraseña:</strong></label>
+            <input type="password" id="newPassword" required 
+                placeholder="Mínimo 8 caracteres, con mayúsculas, minúsculas y números"
+                style="border: 2px solid #007bff; padding: 12px;">
+            <small style="color: #666; display: block; margin-top: 5px;">
+                🔒 La contraseña debe tener al menos 8 caracteres, incluir mayúsculas, minúsculas y números.
+            </small>
         </div>
+        
+        <button onclick="completeNewPassword()" style="background: #28a745; padding: 12px 25px;">
+            ✅ Establecer Nueva Contraseña
+        </button>
+        
+        <div id="changePasswordError" class="error hidden" style="margin-top: 15px;"></div>
     </div>
 
     <!-- DASHBOARD -->
