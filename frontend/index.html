@@ -1,0 +1,400 @@
+<!-- frontend/index.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabCloud - Laboratorios</title>
+    <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@5.2.11/dist/amazon-cognito-identity.min.js"></script>
+    <style>
+        /* (Mismos estilos que antes) */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .login-container, .dashboard {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .error {
+            color: #dc3545;
+            background: #f8d7da;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .success {
+            color: #155724;
+            background: #d4edda;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .hidden {
+            display: none;
+        }
+        .nav {
+            background: #343a40;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .result-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="login-container">
+        <h1>🔬 LabCloud</h1>
+        <p>Sistema de Gestión de Laboratorios</p>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Usuario:</label>
+                <input type="text" id="username" required placeholder="user@laba.com">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Contraseña:</label>
+                <input type="password" id="password" required placeholder="Tu contraseña">
+            </div>
+            
+            <button type="submit">Iniciar Sesión</button>
+        </form>
+        
+        <div id="loginError" class="error hidden"></div>
+        
+        <!-- Pantalla de cambio de contraseña -->
+        <div id="changePasswordScreen" class="hidden">
+            <h3>Cambiar Contraseña</h3>
+            <p>Es necesario cambiar la contraseña temporal</p>
+            <div class="form-group">
+                <label for="newPassword">Nueva Contraseña:</label>
+                <input type="password" id="newPassword" required>
+            </div>
+            <button onclick="completeNewPassword()">Cambiar Contraseña</button>
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="hidden">
+        <div class="nav">
+            <h2>LabCloud - <span id="tenantName"></span></h2>
+            <button onclick="logout()">Cerrar Sesión</button>
+        </div>
+
+        <div>
+            <h3>Resultados de Laboratorio</h3>
+            <div class="form-group">
+                <label for="patientId">Buscar por ID de Paciente:</label>
+                <input type="text" id="patientId" placeholder="ID del paciente">
+                <button onclick="searchResults()">Buscar</button>
+            </div>
+            <div id="resultsList"></div>
+        </div>
+
+        <div style="margin-top: 30px;">
+            <h3>Subir Archivo</h3>
+            <div class="form-group">
+                <input type="file" id="fileInput">
+            </div>
+            <button onclick="uploadFile()">Subir Archivo</button>
+            <div id="uploadStatus"></div>
+        </div>
+    </div>
+
+    <script src="/config.js"></script>
+
+    <script>
+        // Configuración de Cognito desde variables .env
+    console.log('Config cargada:', window.CONFIG);
+    
+    const poolData = {
+        UserPoolId: window.CONFIG.COGNITO_POOL_ID,
+        ClientId: window.CONFIG.COGNITO_APP_CLIENT_ID
+    };
+    
+    const userPool = new AmazonCognitoIdentity.CognitoUserPool(poolData);
+    const API_URL = window.CONFIG.API_URL;
+        
+        let currentUser = null;
+        let currentSession = null;
+        let currentTenant = null;
+
+        // Login REAL con Cognito
+        async function loginWithCognito(username, password) {
+            try {
+                const authenticationData = {
+                    Username: username,
+                    Password: password,
+                };
+                
+                const authenticationDetails = new AmazonCognitoIdentity.AuthenticationDetails(authenticationData);
+                
+                const userData = {
+                    Username: username,
+                    Pool: userPool
+                };
+                
+                const cognitoUser = new AmazonCognitoIdentity.CognitoUser(userData);
+                
+                return new Promise((resolve, reject) => {
+                    cognitoUser.authenticateUser(authenticationDetails, {
+                        onSuccess: function (result) {
+                            currentSession = result;
+                            currentUser = cognitoUser;
+                            
+                            // Obtener los atributos del usuario para sacar el tenant_id
+                            cognitoUser.getUserAttributes(function(err, attributes) {
+                                if (err) {
+                                    reject(err);
+                                    return;
+                                }
+                                
+                                // Buscar el tenant_id en los atributos
+                                const tenantAttr = attributes.find(attr => attr.getName() === 'custom:tenant_id');
+                                currentTenant = tenantAttr ? tenantAttr.getValue() : 'unknown';
+                                
+                                resolve({
+                                    user: cognitoUser,
+                                    session: result,
+                                    tenant: currentTenant
+                                });
+                            });
+                        },
+                        onFailure: function(err) {
+                            reject(err);
+                        },
+                        newPasswordRequired: function(userAttributes, requiredAttributes) {
+                            // Guardar el usuario para el cambio de contraseña
+                            currentUser = cognitoUser;
+                            document.getElementById('loginScreen').classList.add('hidden');
+                            document.getElementById('changePasswordScreen').classList.remove('hidden');
+                            reject(new Error('newPasswordRequired'));
+                        }
+                    });
+                });
+                
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        // Completar cambio de contraseña
+        async function completeNewPassword() {
+            const newPassword = document.getElementById('newPassword').value;
+            
+            if (!newPassword) {
+                alert('Por favor ingresa una nueva contraseña');
+                return;
+            }
+
+            currentUser.completeNewPasswordChallenge(newPassword, {}, {
+                onSuccess: function(result) {
+                    currentSession = result;
+                    
+                    // Obtener tenant_id después del cambio de contraseña
+                    currentUser.getUserAttributes(function(err, attributes) {
+                        if (err) {
+                            showError('loginError', 'Error obteniendo información del usuario');
+                            return;
+                        }
+                        
+                        const tenantAttr = attributes.find(attr => attr.getName() === 'custom:tenant_id');
+                        currentTenant = tenantAttr ? tenantAttr.getValue() : 'unknown';
+                        
+                        showDashboard(currentTenant);
+                    });
+                },
+                onFailure: function(err) {
+                    showError('loginError', 'Error cambiando contraseña: ' + err.message);
+                }
+            });
+        }
+
+        // Mostrar dashboard
+        function showDashboard(tenantId) {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('changePasswordScreen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+            
+            const tenantName = tenantId === 'laba' ? 'Laboratorio A' : 
+                             tenantId === 'labb' ? 'Laboratorio B' : tenantId;
+            
+            document.getElementById('tenantName').textContent = tenantName;
+            
+            // Cargar resultados iniciales
+            loadResults();
+        }
+
+        // Cargar resultados desde tu API
+        async function loadResults(patientId = null) {
+            try {
+                let url = `${API_URL}/api/v1/results`;
+                if (patientId) {
+                    url = `${API_URL}/api/v1/results/${patientId}`;
+                }
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'X-Tenant-Id': currentTenant
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Error cargando resultados');
+                }
+                
+                const data = await response.json();
+                displayResults(data.results || []);
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('resultsList').innerHTML = 
+                    '<p>Error cargando resultados. Verifica la consola.</p>';
+            }
+        }
+
+        // Mostrar resultados
+        function displayResults(results) {
+            const container = document.getElementById('resultsList');
+            
+            if (!results || results.length === 0) {
+                container.innerHTML = '<p>No se encontraron resultados.</p>';
+                return;
+            }
+            
+            container.innerHTML = results.map(result => `
+                <div class="result-item">
+                    <strong>ID Resultado:</strong> ${result.id}<br>
+                    <strong>Paciente:</strong> ${result.patient_id || 'N/A'}<br>
+                    <strong>Prueba:</strong> ${result.test_code}<br>
+                    <strong>Fecha:</strong> ${new Date(result.created_at).toLocaleDateString()}<br>
+                    <strong>Datos:</strong> <pre>${JSON.stringify(result.test_data, null, 2)}</pre>
+                </div>
+            `).join('');
+        }
+
+        // Subir archivo
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showStatus('uploadStatus', 'Por favor selecciona un archivo', 'error');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch(`${API_URL}/api/v1/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Tenant-Id': currentTenant
+                    },
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Error subiendo archivo');
+                }
+                
+                const data = await response.json();
+                showStatus('uploadStatus', `Archivo subido exitosamente! URI: ${data.s3_uri}`, 'success');
+                fileInput.value = '';
+            } catch (error) {
+                showStatus('uploadStatus', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Utilidades
+        function showError(elementId, message) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.classList.remove('hidden');
+        }
+
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="${type}">${message}</div>`;
+        }
+
+        function logout() {
+            if (currentUser) {
+                currentUser.signOut();
+            }
+            currentUser = null;
+            currentSession = null;
+            currentTenant = null;
+            
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('loginForm').reset();
+            document.getElementById('loginError').classList.add('hidden');
+        }
+
+        function searchResults() {
+            const patientId = document.getElementById('patientId').value;
+            loadResults(patientId);
+        }
+
+        // Event Listeners
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const result = await loginWithCognito(username, password);
+                showDashboard(result.tenant);
+            } catch (error) {
+                if (error.message !== 'newPasswordRequired') {
+                    showError('loginError', 'Error de login: ' + error.message);
+                }
+            }
+        });
+
+        console.log('LabCloud Frontend con Cognito REAL cargado');
+    </script>
+</body>
+</html>

@@ -43,12 +43,25 @@ def attach_tenant_from_header():
                 tenant_id = None
     g.tenant_id = tenant_id
 
+@app.route("/config.js")
+def serve_config():
+    """Sirve la configuración JavaScript para el frontend"""
+    config_js = f"""
+window.CONFIG = {{
+    COGNITO_POOL_ID: '{os.getenv("COGNITO_POOL_ID", "")}',
+    COGNITO_APP_CLIENT_ID: '{os.getenv("COGNITO_APP_CLIENT_ID", "")}',
+    API_URL: '{os.getenv("API_URL", "http://localhost:5000")}'
+}};
+console.log('Configuración cargada:', window.CONFIG);
+"""
+    return Response(config_js, mimetype='application/javascript')
+
 @app.route("/")
 def serve_frontend():
     """Sirve el frontend (index.html)"""
     try:
         # Ruta al directorio frontend
-        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'public')
+        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
         return send_from_directory(frontend_path, 'index.html')
     except Exception as e:
         # Fallback: mostrar info del API si el frontend no está disponible
