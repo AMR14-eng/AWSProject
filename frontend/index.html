@@ -109,9 +109,10 @@
             <p>Es necesario cambiar la contraseña temporal</p>
             <div class="form-group">
                 <label for="newPassword">Nueva Contraseña:</label>
-                <input type="password" id="newPassword" required>
+                <input type="password" id="newPassword" required placeholder="Ingresa tu nueva contraseña">
             </div>
             <button onclick="completeNewPassword()">Cambiar Contraseña</button>
+            <div id="changePasswordError" class="error hidden"></div>
         </div>
     </div>
 
@@ -200,12 +201,21 @@
                             reject(err);
                         },
                         newPasswordRequired: function(userAttributes, requiredAttributes) {
-                            console.log('🔐 Nueva contraseña requerida');
+                            console.log('🔐 Nueva contraseña requerida ');
                             // Guardar el usuario para el cambio de contraseña
                             currentUser = cognitoUser;
+                            
+                            // MOSTRAR directamente la pantalla de cambio de contraseña
+                            // No rechazar la promesa, simplemente mostrar la UI
                             document.getElementById('loginScreen').classList.add('hidden');
                             document.getElementById('changePasswordScreen').classList.remove('hidden');
-                            reject(new Error('newPasswordRequired'));
+                            
+                            // Resolver con un objeto especial que indique que se necesita cambio de contraseña
+                            resolve({
+                                needsPasswordChange: true,
+                                user: cognitoUser,
+                                userAttributes: userAttributes
+                            });
                         }
                     });
                 });
@@ -225,13 +235,19 @@
             
             try {
                 const result = await loginWithCognito(username, password);
-                console.log('✅ Login completado, mostrando dashboard...');
-                showDashboard(result.tenant);
+                
+                // Verificar si necesita cambio de contraseña
+                if (result.needsPasswordChange) {
+                    console.log('🔐 Usuario necesita cambiar contraseña');
+                    // Ya se mostró la pantalla de cambio de contraseña en newPasswordRequired
+                    // No hacer nada más aquí
+                } else {
+                    console.log('✅ Login completado, mostrando dashboard...');
+                    showDashboard(result.tenant);
+                }
             } catch (error) {
                 console.error('❌ Error en proceso de login:', error);
-                if (error.message !== 'newPasswordRequired') {
-                    showError('loginError', 'Error de login: ' + error.message);
-                }
+                showError('loginError', 'Error de login: ' + error.message);
             }
         });
 
