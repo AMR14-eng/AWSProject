@@ -13,7 +13,7 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # HTTPS
+  # HTTPS ss
   ingress {
     description = "Allow HTTPS"
     from_port   = 443
