@@ -95,6 +95,173 @@ def health():
     status_code = 200 if health_status["status"] == "healthy" else 503
     return jsonify(health_status), status_code
 
+# ===== PUBLIC REGISTRATION ENDPOINTS =====
+
+@app.route("/api/public/register", methods=["POST"])
+def register_tenant():
+    """Public endpoint to register a new tenant"""
+    try:
+        from app.tenant_registration import create_new_tenant_with_user
+        
+        data = request.json
+        
+        required_fields = ['company_name', 'email', 'contact_name']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({
+                    "success": False,
+                    "message": f"Missing required field: {field}"
+                }), 400
+        
+        # Validate email format
+        import re
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_regex, data['email']):
+            return jsonify({
+                "success": False,
+                "message": "Invalid email format"
+            }), 400
+        
+        # Create tenant
+        result = create_new_tenant_with_user(data)
+        
+        if result['success']:
+            return jsonify({
+                "success": True,
+                "message": "Registration successful! Check your email for credentials.",
+                "tenant_id": result['tenant_id'],
+                "email": result['email'],
+                "note": "You will be prompted to change your password on first login."
+            }), 201
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"Registration failed: {result.get('error', 'Unknown error')}"
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Registration failed: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"Registration failed: {str(e)}"
+        }), 500
+
+@app.route("/api/public/subscription-tiers", methods=["GET"])
+def get_subscription_tiers():
+    """Get available subscription tiers"""
+    try:
+        from app.tenant_registration import get_all_subscription_tiers
+        tiers = get_all_subscription_tiers()
+        return jsonify({"tiers": tiers})
+    except Exception as e:
+        logger.error(f"Failed to get subscription tiers: {e}")
+        return jsonify({"message": f"Failed to get tiers: {str(e)}"}), 500
+
+# ===== DASHBOARD ADMIN ENDPOINTS =====
+
+@app.route("/api/v1/admin/billing", methods=["GET"])
+@cognito_required
+def get_my_billing():
+    """Get billing information for current tenant (admin view)"""
+    try:
+        tenant_id = g.tenant_id
+        if not tenant_id:
+            return jsonify({"message": "No tenant_id provided"}), 400
+        
+        from app.billing import calculate_tenant_bill, get_monthly_usage_summary
+        
+        # Get current month invoice
+        today = date.today()
+        current_month = date(today.year, today.month, 1)
+        current_invoice = calculate_tenant_bill(tenant_id, current_month)
+        
+        # Get usage summary for current year
+        usage_summary = get_monthly_usage_summary(tenant_id, today.year)
+        
+        return jsonify({
+            "tenant_id": tenant_id,
+            "current_invoice": current_invoice,
+            "usage_summary": usage_summary,
+            "year": today.year
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to get billing: {e}")
+        return jsonify({"message": f"Failed to get billing: {str(e)}"}), 500
+
+# ===== BILLING ENDPOINTS (ADMIN) =====
+
+@app.route("/admin/billing/invoices", methods=["GET"])
+def list_invoices():
+    """List all invoices for all tenants (admin only)"""
+    try:
+        from app.billing import generate_invoice_for_all_tenants
+        
+        month_str = request.args.get("month")
+        if month_str:
+            month_date = datetime.strptime(month_str, "%Y-%m").date()
+        else:
+            # Default to current month
+            today = date.today()
+            month_date = date(today.year, today.month, 1)
+        
+        invoices = generate_invoice_for_all_tenants(month_date)
+        
+        return jsonify({
+            "month": month_date.isoformat(),
+            "invoices": invoices,
+            "total_invoices": len(invoices),
+            "total_revenue": sum(inv["total"] for inv in invoices)
+        })
+    except Exception as e:
+        logger.error(f"Failed to list invoices: {e}")
+        return jsonify({"message": f"Failed to list invoices: {str(e)}"}), 500
+
+@app.route("/admin/billing/tenants/<tenant_id>/invoices", methods=["GET"])
+def get_tenant_invoices(tenant_id):
+    """Get all invoices for a specific tenant"""
+    try:
+        from app.billing import calculate_tenant_bill
+        
+        year = request.args.get("year", date.today().year, type=int)
+        invoices = []
+        
+        for month in range(1, 13):
+            month_date = date(year, month, 1)
+            invoice = calculate_tenant_bill(tenant_id, month_date)
+            if invoice:
+                invoices.append(invoice)
+        
+        return jsonify({
+            "tenant_id": tenant_id,
+            "year": year,
+            "invoices": invoices,
+            "total_amount": sum(inv["total"] for inv in invoices)
+        })
+    except Exception as e:
+        logger.error(f"Failed to get tenant invoices: {e}")
+        return jsonify({"message": f"Failed to get tenant invoices: {str(e)}"}), 500
+
+@app.route("/admin/billing/tenants/<tenant_id>/usage", methods=["GET"])
+def get_tenant_usage(tenant_id):
+    """Get usage summary for a tenant"""
+    try:
+        from app.billing import get_monthly_usage_summary
+        
+        year = request.args.get("year", date.today().year, type=int)
+        summary = get_monthly_usage_summary(tenant_id, year)
+        
+        return jsonify({
+            "tenant_id": tenant_id,
+            "year": year,
+            "usage_summary": summary,
+            "total_results": sum(item["results_processed"] for item in summary),
+            "total_api_calls": sum(item["api_calls"] for item in summary)
+        })
+    except Exception as e:
+        logger.error(f"Failed to get tenant usage: {e}")
+        return jsonify({"message": f"Failed to get tenant usage: {str(e)}"}), 500
+    
 # ===== ADMIN ENDPOINTS =====
 
 @app.route("/admin/tenants", methods=["POST"])
@@ -185,6 +352,8 @@ def get_tenant(tenant_id):
     except Exception as e:
         logger.error(f"Failed to get tenant: {e}")
         return jsonify({"message": f"Failed to get tenant: {str(e)}"}), 500
+    
+
 
 # ===== API ENDPOINTS (TENANT-SCOPED) =====
 
