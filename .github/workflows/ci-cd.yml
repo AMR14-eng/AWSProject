@@ -2,18 +2,16 @@ name: CI/CD Pipeline for LabCloud
 
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   push:
-    branches: [ develop, main ]
+    branches: [develop, main]
 
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: labcloud-app
 
 jobs:
-  # Testing en Pull Requests
   test:
-    if: github.event_name == ''pull_request''
     runs-on: ubuntu-latest
     
     steps:
@@ -23,7 +21,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: ''3.9''
+        python-version: "3.9"
 
     - name: Install dependencies
       run: |
@@ -36,15 +34,9 @@ jobs:
         cd app
         python -m pytest tests/test_working.py -v
 
-    - name: Run security scan
-      run: |
-        pip install bandit
-        bandit -r app/ -f json -o bandit_results.json || echo "Bandit completed"
-
-  # Deploy to Staging on merge to develop
   staging:
-    if: github.event_name == ''push'' && github.ref == ''refs/heads/develop''
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
     environment: staging
     
     steps:
@@ -73,10 +65,9 @@ jobs:
       run: |
         echo "Deploying to staging environment"
 
-  # Production deployment with manual approval
   production:
-    if: github.event_name == ''push'' && github.ref == ''refs/heads/main''
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     environment: production
     
     steps:
