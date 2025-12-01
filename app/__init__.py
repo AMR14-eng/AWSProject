@@ -1,5 +1,3 @@
-# ==================== TU ARCHIVO __init__.py CORREGIDO ====================
-
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -29,6 +27,13 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 migrate = Migrate(app, db)
 
+# Middleware para debug de rutas
+@app.before_request
+def debug_routes():
+    """Debug: muestra qué ruta se está capturando"""
+    if request.path.startswith('/api/'):
+        logger.info(f"🌐 API Route: {request.path} - Method: {request.method}")
+
 @app.before_request
 def attach_tenant_from_header():
     """Extract tenant_id from header or JWT"""
@@ -45,8 +50,8 @@ def attach_tenant_from_header():
                 tenant_id = None
     g.tenant_id = tenant_id
 
-# ========== HEALTH CHECK (primero) ==========
-@app.route("/health")
+# ========== HEALTH CHECK ==========
+@app.route("/health", methods=["GET"])
 def health():
     """Health check endpoint for ALB"""
     try:
@@ -66,27 +71,35 @@ def health():
     status_code = 200 if health_status["status"] == "healthy" else 503
     return jsonify(health_status), status_code
 
-# ========== PUBLIC REGISTRATION ENDPOINTS (segundo) ==========
-@app.route("/api/public/register", methods=["POST"])
+# ========== PUBLIC REGISTRATION ENDPOINTS ==========
+@app.route("/api/public/register", methods=["POST", "GET"])  # GET temporal para debug
 def register_tenant():
     """Public endpoint to register a new tenant"""
-    print("🔍 Endpoint /api/public/register llamado")
-    print(f"📦 Método: {request.method}")
-    print(f"📝 Content-Type: {request.content_type}")
-    print(f"📦 Datos crudos: {request.data}")
+    logger.info(f"🎯 /api/public/register - Method: {request.method}")
     
+    # Para debug: si es GET, mostrar info
+    if request.method == "GET":
+        return jsonify({
+            "endpoint": "/api/public/register",
+            "methods_allowed": ["POST"],
+            "description": "Register a new tenant",
+            "required_fields": ["company_name", "email", "contact_name"],
+            "status": "active"
+        })
+    
+    # Procesar POST
     try:
-        # Verificar que sea JSON
+        # Verificar content-type
         if not request.is_json:
+            logger.warning("❌ Content-Type no es application/json")
             return jsonify({
                 "success": False,
                 "message": "Content-Type must be application/json"
             }), 400
         
-        from app.tenant_registration import create_new_tenant_with_user
-        
+        # Parsear JSON
         data = request.get_json(silent=True)
-        print(f"📋 JSON parseado: {data}")
+        logger.info(f"📦 JSON recibido: {data}")
         
         if not data:
             return jsonify({
@@ -94,6 +107,7 @@ def register_tenant():
                 "message": "No JSON data received or invalid JSON"
             }), 400
         
+        # Validar campos requeridos
         required_fields = ['company_name', 'email', 'contact_name']
         for field in required_fields:
             if not data.get(field):
@@ -102,7 +116,7 @@ def register_tenant():
                     "message": f"Missing required field: {field}"
                 }), 400
         
-        # Validate email format
+        # Validar email format
         import re
         email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_regex, data['email']):
@@ -111,9 +125,12 @@ def register_tenant():
                 "message": "Invalid email format"
             }), 400
         
-        # Create tenant
+        # Importar y crear tenant
+        from app.tenant_registration import create_new_tenant_with_user
+        
+        logger.info(f"📋 Creando tenant para: {data['company_name']}")
         result = create_new_tenant_with_user(data)
-        print(f"🎯 Resultado del registro: {result}")
+        logger.info(f"🎯 Resultado: {result}")
         
         if result.get('success'):
             return jsonify({
@@ -131,9 +148,7 @@ def register_tenant():
             }), 500
             
     except Exception as e:
-        logger.error(f"Registration failed: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"💥 Registration failed: {e}", exc_info=True)
         return jsonify({
             "success": False,
             "message": f"Registration failed: {str(e)}"
@@ -265,10 +280,12 @@ def create_tenant():
         if not tenant_id:
             return jsonify({"message": "tenant_id required"}), 400
         
+        # Check if tenant already exists
         existing = Tenant.query.filter_by(tenant_id=tenant_id).first()
         if existing:
             return jsonify({"message": "Tenant already exists"}), 409
         
+        # Create tenant record in database
         tenant = Tenant(
             tenant_id=tenant_id,
             company_name=company_name,
@@ -279,6 +296,7 @@ def create_tenant():
         
         logger.info(f"Created tenant {tenant_id} in database")
         
+        # Provision resources (async in production)
         try:
             provisioning_result = provision_tenant(tenant_id)
             logger.info(f"Provisioned resources for tenant {tenant_id}")
@@ -294,7 +312,7 @@ def create_tenant():
                 "message": "Tenant created but provisioning failed",
                 "tenant_id": tenant_id,
                 "error": str(e)
-            }), 207
+            }), 207  # Multi-Status
             
     except Exception as e:
         logger.error(f"Failed to create tenant: {e}")
@@ -349,6 +367,7 @@ def create_result():
         if not tenant_id:
             return jsonify({"message": "No tenant_id provided"}), 400
         
+        # Verify tenant exists
         tenant = Tenant.query.filter_by(tenant_id=tenant_id).first()
         if not tenant:
             return jsonify({"message": "Tenant not found"}), 404
@@ -361,6 +380,7 @@ def create_result():
         if not patient_id or not test_code:
             return jsonify({"message": "patient_id and test_code are required"}), 400
         
+        # Create lab result
         r = LabResult(
             tenant_id=tenant_id,
             patient_id=patient_id,
@@ -370,6 +390,7 @@ def create_result():
         db.session.add(r)
         db.session.commit()
         
+        # Track usage
         incr_results_processed(tenant_id, 1)
         incr_api_calls(tenant_id, 1)
         
@@ -394,6 +415,7 @@ def get_results(patient_id):
         if not tenant_id:
             return jsonify({"message": "No tenant_id provided"}), 400
         
+        # Query only this tenant's results
         results = LabResult.query.filter_by(
             tenant_id=tenant_id,
             patient_id=patient_id
@@ -435,6 +457,7 @@ def upload_file():
         if not file_content:
             return jsonify({"message": "No file content provided"}), 400
         
+        # Upload to S3 with tenant prefix
         bucket = app.config.get('S3_BUCKET', 'tenant-lab-bucket')
         key = f"{tenant_id}/uploads/{int(time.time())}.bin"
         
@@ -453,14 +476,16 @@ def upload_file():
         logger.error(f"Upload failed: {e}")
         return jsonify({"message": f"Upload failed: {str(e)}"}), 500
 
-# ========== RUTAS DE FRONTEND (¡AL FINAL!) ==========
+# ========== FRONTEND ROUTES (¡AL FINAL!) ==========
 @app.route("/")
 def serve_frontend():
     """Sirve el frontend (index.html)"""
     try:
+        # Ruta al directorio frontend
         frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
         return send_from_directory(frontend_path, 'index.html')
     except Exception as e:
+        # Fallback: mostrar info del API si el frontend no está disponible
         return jsonify({
             "message": "LabCloud Flask API - Frontend not available",
             "error": str(e),
@@ -472,10 +497,18 @@ def serve_frontend():
             }
         }), 500
 
-# ¡ESTA RUTA DEBE IR AL FINAL DE TODO!
+# ¡ESTA RUTA DEBE SER LA ÚLTIMA!
 @app.route("/<path:path>")
 def serve_static_files(path):
-    """Sirve archivos estáticos (CSS, JS, imágenes) - ¡ÚLTIMA RUTA!"""
+    """Sirve archivos estáticos (CSS, JS, imágenes)"""
+    # Si es una ruta de API, no servir archivos estáticos
+    if path.startswith('api/') or path.startswith('admin/'):
+        return jsonify({
+            "error": "Endpoint not found",
+            "path": f"/{path}",
+            "available_endpoints": ["/api/public/register", "/api/v1/results", "/health"]
+        }), 404
+    
     try:
         frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
         return send_from_directory(frontend_path, path)
@@ -487,10 +520,28 @@ def serve_static_files(path):
 def not_found(error):
     return jsonify({"message": "Endpoint not found"}), 404
 
+@app.errorhandler(405)
+def method_not_allowed(error):
+    return jsonify({
+        "message": "Method not allowed",
+        "error": str(error.description)
+    }), 405
+
 @app.errorhandler(500)
 def internal_error(error):
     logger.error(f"Internal server error: {error}")
     return jsonify({"message": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)  # ¡debug=True para ver errores!
+    # Ejecutar en modo debug para ver errores
+    print("🚀 Starting LabCloud Flask API...")
+    print("📋 Available endpoints:")
+    print("   - GET  /health")
+    print("   - POST /api/public/register")
+    print("   - GET  /api/public/subscription-tiers")
+    print("   - GET  /api/v1/results/<patient_id>")
+    print("   - POST /api/v1/results")
+    print("   - POST /api/v1/upload")
+    print("   - GET  /admin/tenants")
+    print("\n🔍 Debug mode: ON")
+    app.run(host="0.0.0.0", port=5000, debug=True)
