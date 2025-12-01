@@ -40,7 +40,7 @@ resource "aws_cognito_user_pool" "pool" {
     }
   }
 
-  # MFA configuration - CORREGIDO
+  # MFA configuration - CORREGIDOoo
   mfa_configuration = "OFF"  # ← CAMBIO AQUÍ
 
   tags = {
