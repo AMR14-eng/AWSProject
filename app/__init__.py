@@ -1,3 +1,5 @@
+# ==================== TU ARCHIVO __init__.py CORREGIDO ====================
+
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -7,6 +9,7 @@ from app.auth import cognito_required, verify_jwt
 from app.s3client import upload_bytes
 from app.usage import incr_results_processed, incr_api_calls
 from app.provisioner import provision_tenant
+from datetime import datetime, date  # ¡IMPORTANTE!
 import time
 import logging
 import os
@@ -29,7 +32,6 @@ migrate = Migrate(app, db)
 @app.before_request
 def attach_tenant_from_header():
     """Extract tenant_id from header or JWT"""
-    # Simple: accept X-Tenant-Id header OR try to get it from JWT claims
     tenant_id = request.headers.get("X-Tenant-Id")
     if not tenant_id:
         token = request.headers.get("Authorization")
@@ -43,42 +45,11 @@ def attach_tenant_from_header():
                 tenant_id = None
     g.tenant_id = tenant_id
 
-
-@app.route("/")
-def serve_frontend():
-    """Sirve el frontend (index.html)"""
-    try:
-        # Ruta al directorio frontend
-        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
-        return send_from_directory(frontend_path, 'index.html')
-    except Exception as e:
-        # Fallback: mostrar info del API si el frontend no está disponible
-        return jsonify({
-            "message": "LabCloud Flask API - Frontend not available",
-            "error": str(e),
-            "version": "1.0.0",
-            "endpoints": {
-                "health": "/health",
-                "admin": "/admin/tenants", 
-                "api": "/api/v1"
-            }
-        }), 500
-
-@app.route("/<path:path>")
-def serve_static_files(path):
-    """Sirve archivos estáticos (CSS, JS, imágenes)"""
-    try:
-        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
-        return send_from_directory(frontend_path, path)
-    except Exception as e:
-        return jsonify({"error": "File not found", "details": str(e)}), 404
-
-
+# ========== HEALTH CHECK (primero) ==========
 @app.route("/health")
 def health():
     """Health check endpoint for ALB"""
     try:
-        # Check database connection
         from sqlalchemy import text
         db.session.execute(text("SELECT 1"))
         db_status = "healthy"
@@ -95,15 +66,33 @@ def health():
     status_code = 200 if health_status["status"] == "healthy" else 503
     return jsonify(health_status), status_code
 
-# ===== PUBLIC REGISTRATION ENDPOINTS =====
-
+# ========== PUBLIC REGISTRATION ENDPOINTS (segundo) ==========
 @app.route("/api/public/register", methods=["POST"])
 def register_tenant():
     """Public endpoint to register a new tenant"""
+    print("🔍 Endpoint /api/public/register llamado")
+    print(f"📦 Método: {request.method}")
+    print(f"📝 Content-Type: {request.content_type}")
+    print(f"📦 Datos crudos: {request.data}")
+    
     try:
+        # Verificar que sea JSON
+        if not request.is_json:
+            return jsonify({
+                "success": False,
+                "message": "Content-Type must be application/json"
+            }), 400
+        
         from app.tenant_registration import create_new_tenant_with_user
         
-        data = request.json
+        data = request.get_json(silent=True)
+        print(f"📋 JSON parseado: {data}")
+        
+        if not data:
+            return jsonify({
+                "success": False,
+                "message": "No JSON data received or invalid JSON"
+            }), 400
         
         required_fields = ['company_name', 'email', 'contact_name']
         for field in required_fields:
@@ -124,13 +113,15 @@ def register_tenant():
         
         # Create tenant
         result = create_new_tenant_with_user(data)
+        print(f"🎯 Resultado del registro: {result}")
         
-        if result['success']:
+        if result.get('success'):
             return jsonify({
                 "success": True,
-                "message": "Registration successful! Check your email for credentials.",
+                "message": "Registration successful!",
                 "tenant_id": result['tenant_id'],
                 "email": result['email'],
+                "temp_password": result.get('temp_password', 'Check your email'),
                 "note": "You will be prompted to change your password on first login."
             }), 201
         else:
@@ -141,6 +132,8 @@ def register_tenant():
             
     except Exception as e:
         logger.error(f"Registration failed: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             "success": False,
             "message": f"Registration failed: {str(e)}"
@@ -157,8 +150,7 @@ def get_subscription_tiers():
         logger.error(f"Failed to get subscription tiers: {e}")
         return jsonify({"message": f"Failed to get tiers: {str(e)}"}), 500
 
-# ===== DASHBOARD ADMIN ENDPOINTS =====
-
+# ========== DASHBOARD ADMIN ENDPOINTS ==========
 @app.route("/api/v1/admin/billing", methods=["GET"])
 @cognito_required
 def get_my_billing():
@@ -189,8 +181,7 @@ def get_my_billing():
         logger.error(f"Failed to get billing: {e}")
         return jsonify({"message": f"Failed to get billing: {str(e)}"}), 500
 
-# ===== BILLING ENDPOINTS (ADMIN) =====
-
+# ========== BILLING ENDPOINTS (ADMIN) ==========
 @app.route("/admin/billing/invoices", methods=["GET"])
 def list_invoices():
     """List all invoices for all tenants (admin only)"""
@@ -201,7 +192,6 @@ def list_invoices():
         if month_str:
             month_date = datetime.strptime(month_str, "%Y-%m").date()
         else:
-            # Default to current month
             today = date.today()
             month_date = date(today.year, today.month, 1)
         
@@ -261,9 +251,8 @@ def get_tenant_usage(tenant_id):
     except Exception as e:
         logger.error(f"Failed to get tenant usage: {e}")
         return jsonify({"message": f"Failed to get tenant usage: {str(e)}"}), 500
-    
-# ===== ADMIN ENDPOINTS =====
 
+# ========== ADMIN ENDPOINTS ==========
 @app.route("/admin/tenants", methods=["POST"])
 def create_tenant():
     """Create a new tenant (admin only)"""
@@ -276,12 +265,10 @@ def create_tenant():
         if not tenant_id:
             return jsonify({"message": "tenant_id required"}), 400
         
-        # Check if tenant already exists
         existing = Tenant.query.filter_by(tenant_id=tenant_id).first()
         if existing:
             return jsonify({"message": "Tenant already exists"}), 409
         
-        # Create tenant record in database
         tenant = Tenant(
             tenant_id=tenant_id,
             company_name=company_name,
@@ -292,7 +279,6 @@ def create_tenant():
         
         logger.info(f"Created tenant {tenant_id} in database")
         
-        # Provision resources (async in production)
         try:
             provisioning_result = provision_tenant(tenant_id)
             logger.info(f"Provisioned resources for tenant {tenant_id}")
@@ -308,7 +294,7 @@ def create_tenant():
                 "message": "Tenant created but provisioning failed",
                 "tenant_id": tenant_id,
                 "error": str(e)
-            }), 207  # Multi-Status
+            }), 207
             
     except Exception as e:
         logger.error(f"Failed to create tenant: {e}")
@@ -352,11 +338,8 @@ def get_tenant(tenant_id):
     except Exception as e:
         logger.error(f"Failed to get tenant: {e}")
         return jsonify({"message": f"Failed to get tenant: {str(e)}"}), 500
-    
 
-
-# ===== API ENDPOINTS (TENANT-SCOPED) =====
-
+# ========== API ENDPOINTS (TENANT-SCOPED) ==========
 @app.route("/api/v1/results", methods=["POST"])
 @cognito_required
 def create_result():
@@ -366,7 +349,6 @@ def create_result():
         if not tenant_id:
             return jsonify({"message": "No tenant_id provided"}), 400
         
-        # Verify tenant exists
         tenant = Tenant.query.filter_by(tenant_id=tenant_id).first()
         if not tenant:
             return jsonify({"message": "Tenant not found"}), 404
@@ -379,7 +361,6 @@ def create_result():
         if not patient_id or not test_code:
             return jsonify({"message": "patient_id and test_code are required"}), 400
         
-        # Create lab result
         r = LabResult(
             tenant_id=tenant_id,
             patient_id=patient_id,
@@ -389,7 +370,6 @@ def create_result():
         db.session.add(r)
         db.session.commit()
         
-        # Track usage
         incr_results_processed(tenant_id, 1)
         incr_api_calls(tenant_id, 1)
         
@@ -414,7 +394,6 @@ def get_results(patient_id):
         if not tenant_id:
             return jsonify({"message": "No tenant_id provided"}), 400
         
-        # Query only this tenant's results
         results = LabResult.query.filter_by(
             tenant_id=tenant_id,
             patient_id=patient_id
@@ -456,7 +435,6 @@ def upload_file():
         if not file_content:
             return jsonify({"message": "No file content provided"}), 400
         
-        # Upload to S3 with tenant prefix
         bucket = app.config.get('S3_BUCKET', 'tenant-lab-bucket')
         key = f"{tenant_id}/uploads/{int(time.time())}.bin"
         
@@ -475,6 +453,35 @@ def upload_file():
         logger.error(f"Upload failed: {e}")
         return jsonify({"message": f"Upload failed: {str(e)}"}), 500
 
+# ========== RUTAS DE FRONTEND (¡AL FINAL!) ==========
+@app.route("/")
+def serve_frontend():
+    """Sirve el frontend (index.html)"""
+    try:
+        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+        return send_from_directory(frontend_path, 'index.html')
+    except Exception as e:
+        return jsonify({
+            "message": "LabCloud Flask API - Frontend not available",
+            "error": str(e),
+            "version": "1.0.0",
+            "endpoints": {
+                "health": "/health",
+                "admin": "/admin/tenants", 
+                "api": "/api/v1"
+            }
+        }), 500
+
+# ¡ESTA RUTA DEBE IR AL FINAL DE TODO!
+@app.route("/<path:path>")
+def serve_static_files(path):
+    """Sirve archivos estáticos (CSS, JS, imágenes) - ¡ÚLTIMA RUTA!"""
+    try:
+        frontend_path = os.path.join(os.path.dirname(__file__), '..', 'frontend')
+        return send_from_directory(frontend_path, path)
+    except Exception as e:
+        return jsonify({"error": "File not found", "details": str(e)}), 404
+
 # Error handlers
 @app.errorhandler(404)
 def not_found(error):
@@ -486,4 +493,4 @@ def internal_error(error):
     return jsonify({"message": "Internal server error"}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)  # ¡debug=True para ver errores!
