@@ -1,4 +1,4 @@
-# tenant_registration.py
+# tenant_registration.py - VERSIÓN CORREGIDA
 import boto3
 import os
 import secrets
@@ -6,11 +6,9 @@ import string
 from datetime import datetime
 import psycopg2
 from dotenv import load_dotenv
-from flask import current_app
 import logging
 
 logger = logging.getLogger(__name__)
-
 load_dotenv()
 
 def generate_temp_password(length=12):
@@ -22,17 +20,11 @@ def generate_temp_password(length=12):
 def create_new_tenant_with_user(tenant_data):
     """
     Create a new tenant with Cognito user and database schema
-    
-    Args:
-        tenant_data: dict with keys:
-            - company_name: Name of the company/lab
-            - email: Admin email
-            - contact_name: Contact person name
-            - subscription_tier: basic/professional/enterprise
     """
     
     # Generate tenant_id from company name
-    tenant_id = tenant_data['company_name'].lower().replace(' ', '_').replace('.', '').replace(',', '')[:20]
+    company_name = tenant_data['company_name']
+    tenant_id = company_name.lower().replace(' ', '_').replace('.', '').replace(',', '')[:20]
     
     # Add timestamp to make it unique
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
@@ -44,7 +36,24 @@ def create_new_tenant_with_user(tenant_data):
     
     try:
         # 1. Connect to database
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        db_config = {
+            'host': os.getenv('DB_HOST'),
+            'port': os.getenv('DB_PORT', '5432'),
+            'database': os.getenv('DB_NAME'),
+            'user': os.getenv('DB_USER'),
+            'password': os.getenv('DB_PASSWORD')
+        }
+        
+        # Try using DATABASE_URL if individual variables not set
+        if not all(db_config.values()):
+            DATABASE_URL = os.getenv("DATABASE_URL")
+            if DATABASE_URL:
+                conn = psycopg2.connect(DATABASE_URL)
+            else:
+                raise Exception("No database configuration found")
+        else:
+            conn = psycopg2.connect(**db_config)
+            
         cur = conn.cursor()
         
         # 2. Create tenant record
@@ -54,26 +63,31 @@ def create_new_tenant_with_user(tenant_data):
             RETURNING id
         """, (
             tenant_id,
-            tenant_data['company_name'],
+            company_name,
             tenant_data.get('subscription_tier', 'professional'),
             datetime.utcnow()
         ))
         
         tenant_db_id = cur.fetchone()[0]
         
-        # 3. Create schema for tenant (if using schema isolation)
+        # 3. Create schema for tenant (optional)
         try:
             cur.execute(f"CREATE SCHEMA IF NOT EXISTS {tenant_id}")
+            logger.info(f"✅ Schema created for tenant: {tenant_id}")
         except Exception as e:
-            logger.warning(f"Could not create schema for tenant {tenant_id}: {e}")
+            logger.warning(f"Could not create schema: {e}")
         
         conn.commit()
         logger.info(f"✅ Created tenant {tenant_id} in database")
         
-        # 4. Create Cognito user
+        # 4. Create Cognito user - ¡VERSIÓN CORREGIDA SIN custom:is_admin!
         cognito = boto3.client('cognito-idp', region_name=os.getenv("AWS_REGION", "us-east-2"))
         user_pool_id = os.getenv("COGNITO_POOL_ID")
         
+        if not user_pool_id:
+            raise Exception("COGNITO_POOL_ID not found")
+        
+        # Solo usar atributos que SÍ existen en el schema
         response = cognito.admin_create_user(
             UserPoolId=user_pool_id,
             Username=admin_email,
@@ -82,44 +96,44 @@ def create_new_tenant_with_user(tenant_data):
             UserAttributes=[
                 {'Name': 'email', 'Value': admin_email},
                 {'Name': 'email_verified', 'Value': 'True'},
-                {'Name': 'custom:tenant_id', 'Value': tenant_id},
+                {'Name': 'custom:tenant_id', 'Value': tenant_id},  # Este sí debería existir
                 {'Name': 'name', 'Value': tenant_data.get('contact_name', '')},
-                {'Name': 'custom:is_admin', 'Value': 'true'}
+                # NO incluir 'custom:is_admin' si no está en el schema
             ]
         )
         
-        # 5. Add user to admin group if exists
+        # 5. En lugar de custom attribute, puedes usar grupos
         try:
+            # Crear grupo de Admins si no existe
+            try:
+                cognito.create_group(
+                    UserPoolId=user_pool_id,
+                    GroupName='Admins',
+                    Description='Administrator users'
+                )
+                logger.info("✅ Created 'Admins' group")
+            except cognito.exceptions.GroupExistsException:
+                logger.info("⚠️ 'Admins' group already exists")
+            
+            # Agregar usuario al grupo
             cognito.admin_add_user_to_group(
                 UserPoolId=user_pool_id,
                 Username=admin_email,
                 GroupName='Admins'
             )
+            logger.info(f"✅ Added user {admin_email} to Admins group")
         except Exception as e:
-            logger.warning(f"Could not add user to admin group: {e}")
+            logger.warning(f"Could not manage groups: {e}")
+            # Continuar de todos modos
         
         logger.info(f"✅ Created user {admin_email} in Cognito")
-        
-        # 6. Create S3 folder structure
-        s3 = boto3.client('s3')
-        bucket_name = os.getenv("S3_BUCKET", "tenant-lab-bucket")
-        
-        # Create folder structure
-        folders = [f"{tenant_id}/uploads/", f"{tenant_id}/results/", f"{tenant_id}/exports/"]
-        for folder in folders:
-            s3.put_object(Bucket=bucket_name, Key=folder, Body=b'')
-        
-        logger.info(f"✅ Created S3 folders for tenant {tenant_id}")
-        
-        # 7. Send welcome email (optional - implement email service)
-        # send_welcome_email(admin_email, tenant_id, temp_password)
         
         return {
             "success": True,
             "tenant_id": tenant_id,
             "email": admin_email,
             "temp_password": temp_password,
-            "message": "Tenant created successfully. Check your email for credentials."
+            "message": "Tenant and user created successfully."
         }
         
     except Exception as e:
