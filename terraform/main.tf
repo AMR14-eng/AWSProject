@@ -16,7 +16,7 @@ terraform {
     }
   }
 }
-
+# provedor 
 provider "aws" {
   region = var.aws_region
   
