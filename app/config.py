@@ -5,7 +5,7 @@ import os
 load_dotenv()
 
 # ----------------------
-# Variables globales
+# Variables globales ss
 # ----------------------
 S3_BUCKET = os.getenv("S3_BUCKET", "tenant-lab-bucket")
 
