@@ -14,23 +14,6 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# User data template
-data "template_file" "user_data" {
-  template = file("${path.module}/user_data.sh")
-
-  vars = {
-    db_host           = split(":", aws_db_instance.postgres.endpoint)[0]
-    db_port           = "5432"
-    db_name           = aws_db_instance.postgres.db_name
-    db_user           = var.db_username
-    db_password       = var.db_password
-    s3_bucket         = aws_s3_bucket.app_bucket.id
-    cognito_pool_id   = aws_cognito_user_pool.pool.id
-    cognito_client_id = aws_cognito_user_pool_client.client.id
-    aws_region        = var.aws_region
-  }
-}
-
 # EC2 Instance
 resource "aws_instance" "flask_server" {
   ami           = data.aws_ami.ubuntu.id
@@ -43,7 +26,8 @@ resource "aws_instance" "flask_server" {
   key_name             = aws_key_pair.deployer.key_name
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
-  user_data = data.template_file.user_data.rendered
+  # SIN user_data - solo la instancia básica
+  # Puedes agregar la configuración de la aplicación manualmente después
 
   root_block_device {
     volume_size = 20
