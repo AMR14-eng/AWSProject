@@ -13,7 +13,7 @@ ENV/
 instance/
 .webassets-cache
 
-# Environment variables
+# Environment variables s
 .env
 .env.local
 
