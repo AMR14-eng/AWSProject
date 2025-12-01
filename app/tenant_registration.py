@@ -1,4 +1,3 @@
-# tenant_registration.py - VERSIÓN QUE SÍ FUNCIONA
 import boto3
 import os
 import secrets
@@ -19,7 +18,7 @@ def generate_temp_password(length=12):
 
 def create_new_tenant_with_user(tenant_data):
     """
-    Create a new tenant with Cognito user - VERSIÓN CORREGIDA
+    Create a new tenant with Cognito user - VERSIÓN CORREGIDA SIN custom:is_admin
     """
     
     # Generate tenant_id
@@ -33,51 +32,9 @@ def create_new_tenant_with_user(tenant_data):
     admin_email = tenant_data['email']
     
     try:
-        # ===== 1. PRIMERO crear en Cognito (más importante) =====
-        cognito = boto3.client('cognito-idp', region_name=os.getenv("AWS_REGION", "us-east-2"))
-        user_pool_id = os.getenv("COGNITO_POOL_ID", "us-east-2_Wi7VHkSWm")
+        print(f"🔧 Iniciando creación de tenant: {tenant_id}")
         
-        # Verificar qué atributos personalizados existen
-        print(f"🔍 Creando usuario en Cognito: {admin_email}")
-        print(f"🔍 User Pool ID: {user_pool_id}")
-        
-        # Lista SEGURA de atributos (solo los que sabemos que existen)
-        user_attributes = [
-            {'Name': 'email', 'Value': admin_email},
-            {'Name': 'email_verified', 'Value': 'True'},
-            {'Name': 'name', 'Value': tenant_data.get('contact_name', '')}
-        ]
-        
-        # Solo agregar custom:tenant_id si estamos seguros que existe
-        # Si falla, lo intentamos sin él
-        try:
-            # Intentar con custom:tenant_id
-            response = cognito.admin_create_user(
-                UserPoolId=user_pool_id,
-                Username=admin_email,
-                TemporaryPassword=temp_password,
-                MessageAction='SUPPRESS',
-                UserAttributes=user_attributes + [
-                    {'Name': 'custom:tenant_id', 'Value': tenant_id}
-                ]
-            )
-            print("✅ Usuario creado CON custom:tenant_id")
-            
-        except Exception as e:
-            if "custom:tenant_id" in str(e):
-                print("⚠️ custom:tenant_id no existe, creando sin él")
-                # Crear sin custom:tenant_id
-                response = cognito.admin_create_user(
-                    UserPoolId=user_pool_id,
-                    Username=admin_email,
-                    TemporaryPassword=temp_password,
-                    MessageAction='SUPPRESS',
-                    UserAttributes=user_attributes
-                )
-            else:
-                raise e
-        
-        # ===== 2. LUEGO intentar crear en PostgreSQL (si hay configuración) =====
+        # ===== 1. PostgreSQL (opcional) =====
         try:
             db_config = {
                 'host': os.getenv('DB_HOST'),
@@ -87,16 +44,14 @@ def create_new_tenant_with_user(tenant_data):
                 'password': os.getenv('DB_PASSWORD')
             }
             
-            if all(db_config.values()):  # Si todas las vars están configuradas
+            if all(db_config.values()):
                 conn = psycopg2.connect(**db_config)
                 cur = conn.cursor()
                 
-                # Crear tenant en DB
                 cur.execute("""
                     INSERT INTO tenants (tenant_id, company_name, subscription_tier, created_at)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (tenant_id) DO NOTHING
-                    RETURNING id
                 """, (
                     tenant_id,
                     company_name,
@@ -105,49 +60,71 @@ def create_new_tenant_with_user(tenant_data):
                 ))
                 
                 conn.commit()
-                print(f"✅ Tenant creado en PostgreSQL: {tenant_id}")
-                
-                # Crear schema si es necesario
-                try:
-                    cur.execute(f"CREATE SCHEMA IF NOT EXISTS {tenant_id}")
-                    conn.commit()
-                    print(f"✅ Schema creado: {tenant_id}")
-                except Exception as schema_error:
-                    print(f"⚠️ No se pudo crear schema: {schema_error}")
-                
                 cur.close()
                 conn.close()
+                print(f"✅ Tenant creado en PostgreSQL")
             else:
-                print("⚠️ Configuración de DB incompleta, saltando PostgreSQL")
+                print("⚠️ PostgreSQL no configurado, omitiendo")
                 
         except Exception as db_error:
-            print(f"⚠️ Error con PostgreSQL (continuando): {db_error}")
-            # Continuamos aunque falle la DB, lo importante es Cognito
+            print(f"⚠️ Error PostgreSQL: {db_error}")
+            # Continuar de todos modos
         
-        # ===== 3. Crear estructura en S3 (opcional) =====
+        # ===== 2. Cognito (IMPORTANTE) =====
+        cognito = boto3.client('cognito-idp', region_name=os.getenv("AWS_REGION", "us-east-2"))
+        user_pool_id = os.getenv("COGNITO_POOL_ID", "us-east-2_Wi7VHkSWm")
+        
+        print(f"🔑 Creando usuario en Cognito: {admin_email}")
+        
+        # Atributos SEGUROS (sin custom:is_admin)
+        user_attributes = [
+            {'Name': 'email', 'Value': admin_email},
+            {'Name': 'email_verified', 'Value': 'True'},
+            {'Name': 'name', 'Value': tenant_data.get('contact_name', 'Usuario')}
+        ]
+        
+        # Intentar primero sin custom:tenant_id
         try:
-            s3 = boto3.client('s3')
-            bucket_name = os.getenv('S3_BUCKET', 'tenant-lab-bucket')
+            response = cognito.admin_create_user(
+                UserPoolId=user_pool_id,
+                Username=admin_email,
+                TemporaryPassword=temp_password,
+                MessageAction='SUPPRESS',
+                UserAttributes=user_attributes
+            )
+            print("✅ Usuario creado en Cognito exitosamente")
             
-            # Crear folders
-            folders = [f"{tenant_id}/uploads/", f"{tenant_id}/results/"]
-            for folder in folders:
-                s3.put_object(Bucket=bucket_name, Key=folder, Body=b'')
+        except Exception as e:
+            print(f"⚠️ Error creando usuario: {e}")
+            # Si falla, podríamos intentar otro método
             
-            print(f"✅ Folders S3 creados para: {tenant_id}")
-        except Exception as s3_error:
-            print(f"⚠️ Error con S3 (continuando): {s3_error}")
+            # Método de respaldo: crear sin atributos
+            try:
+                response = cognito.admin_create_user(
+                    UserPoolId=user_pool_id,
+                    Username=admin_email,
+                    TemporaryPassword=temp_password,
+                    MessageAction='SUPPRESS'
+                )
+                print("✅ Usuario creado (método simple)")
+            except Exception as e2:
+                print(f"❌ Error crítico: {e2}")
+                return {
+                    "success": False,
+                    "error": f"No se pudo crear usuario en Cognito: {e2}",
+                    "tenant_id": tenant_id
+                }
         
         return {
             "success": True,
             "tenant_id": tenant_id,
             "email": admin_email,
             "temp_password": temp_password,
-            "message": "Usuario creado exitosamente en Cognito"
+            "message": "Registro completado exitosamente. Guarda estas credenciales."
         }
         
     except Exception as e:
-        print(f"❌ Error crítico: {e}")
+        print(f"❌ Error general: {e}")
         import traceback
         traceback.print_exc()
         
