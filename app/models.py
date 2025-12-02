@@ -15,7 +15,7 @@ class UserProfile(db.Model):
     __tablename__ = "user_profiles"
     id = db.Column(db.Integer, primary_key=True)
     tenant_id = db.Column(db.String(64), db.ForeignKey('tenants.tenant_id'), index=True, nullable=False)
-    user_id = db.Column(db.String(128))  # id from Cognito
+    user_id = db.Column(db.String(128))  # id Cognito (from)
     email = db.Column(db.String(200))
     name = db.Column(db.String(200))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
