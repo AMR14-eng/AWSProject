@@ -21,7 +21,7 @@ def create_new_tenant_with_user(tenant_data):
     Create a new tenant with Cognito user - VERSIÓN CORREGIDA SIN custom:is_admin
     """
     
-    # Generate tenant_id
+    # Generate tenant_iddd
     company_name = tenant_data['company_name']
     tenant_id = company_name.lower().replace(' ', '_').replace('.', '').replace(',', '')[:20]
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
