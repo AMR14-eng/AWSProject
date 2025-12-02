@@ -200,30 +200,34 @@ resource "aws_security_group" "rds_sg" {
 └── requirements.txt    # Dependencies
 ```
 
-### Billing System Implementation
-**Automated Usage Tracking:**
-```python
-def incr_results_processed(tenant_id, n=1):
-    """Track lab results processed for billing"""
-    month = date.today().replace(day=1)
-    usage = TenantUsage.query.get((tenant_id, month))
-    if not usage:
-        usage = TenantUsage(tenant_id=tenant_id, month=month)
-        db.session.add(usage)
-    usage.results_processed += n
-    db.session.commit()
-```
+## Billing System Implementation
 
-**Invoice Generation:**
-```python
-def calculate_tenant_bill(tenant_id, month_date):
-    usage = TenantUsage.query.filter_by(tenant_id=tenant_id, month=month_date).first()
-    base = RATE["base_fee"]  # $299.00
-    overage = max(0, usage.results_processed - RATE["included_results"])
-    overage_charge = overage * RATE["overage_per_result"]  # $0.50 each
-    total = base + overage_charge
-    return {"total": total, "breakdown": {...}}
-```
+### Architecture Overview
+- *Usage Tracking*: Real-time counters in TenantUsage table
+- *Invoice Generation*: Monthly batch processing via cron job
+- *Pricing Model*: Tier-based subscription + usage-based overage
+- *Data Persistence*: JSON invoices stored in invoices/ directory
+
+### Data Flow
+1. *Usage Collection* → Application increments counters per tenant
+2. *Monthly Aggregation* → Cron job runs on 1st of each month
+3. *Invoice Calculation* → Apply tier pricing + overage charges
+4. *Export & Notification* → JSON files + email (future enhancement)
+
+### Cost Components
+| Component | Base Tier | Professional Tier | Enterprise Tier |
+|-----------|-----------|-------------------|-----------------|
+| Monthly Fee | $99 | $299 | $599 |
+| Included Results | 500 | 1,000 | 5,000 |
+| Overage Charge | $0.75/result | $0.50/result | $0.25/result |
+| Storage | $0.50/GB (all tiers) | | |
+| API Calls | $0.10/1,000 calls (all tiers) | | |
+
+### Extensibility Points
+- *Payment Gateway Integration*: Connect to Stripe/PayPal
+- *Invoice Templates*: HTML/PDF generation
+- *Usage Analytics*: Dashboard for tenant usage patterns
+- *Pro-rating*: Handle mid-month subscription changes
 
 ## Conclusion
 
@@ -241,25 +245,4 @@ This architecture is **ideal for**:
 - HIPAA-compliant healthcare applications
 ```
 
----
-
-## **Resumen de la separación:**
-
-### **README.md** → **Para USUARIOS/DESARROLLADORES**
-- ✅ Cómo usar el sistema
-- ✅ Comandos paso a paso
-- ✅ Cómo desplegar
-- ✅ Cómo probar
-- ✅ Cómo usar la API
-- ✅ Troubleshooting práctico
-- ✅ Ejemplos de uso del billing system
-
-### **ARCHITECTURE.md** → **Para ARQUITECTOS/INGENIEROS**
-- ✅ Decisiones técnicas profundas
-- ✅ Análisis de costos detallado
-- ✅ Justificación de recursos
-- ✅ Estrategias de escalabilidad
-- ✅ Consideraciones de seguridad
-- ✅ Trade-offs y alternativas evaluadas
-- ✅ Diagramas y análisis de capacidad
 
