@@ -2,7 +2,7 @@ import unittest
 import sys
 import os
 
-# Agregar el directorio app al path
+# Agregar el directorio app al pathhh
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app import app
