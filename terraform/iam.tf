@@ -1,4 +1,4 @@
-# IAM Role for EC2
+# IAM Role for EC22222
 resource "aws_iam_role" "ec2_role" {
   name = "${var.project_name}-role"
 
