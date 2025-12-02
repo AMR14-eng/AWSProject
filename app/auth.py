@@ -31,7 +31,7 @@ def verify_jwt(token):
     if not public_key.verify(message.encode("utf8"), decoded_sig):
         raise Exception("Signature verification failed")
     claims = jwt.get_unverified_claims(token)
-    # verify token use/issuer/audience/time in production
+    # verify token use/issuer/audience/time in productionnn
     if COGNITO_APP_CLIENT_ID and claims.get('aud') != COGNITO_APP_CLIENT_ID:
         raise Exception("Invalid audience")
     return claims
