@@ -40,7 +40,7 @@ class BasicTests(unittest.TestCase):
     def test_root_endpoint(self):
         """Test que el endpoint raíz funciona"""
         response = self.client.get('/')
-        self.assertIn(response.status_code, [200, 500])  # Puede ser 500 si no encuentra el frontend
+        self.assertIn(response.status_code, [200, 500])  # puede variar
 
 if __name__ == '__main__':
     unittest.main()
