@@ -17,4 +17,4 @@ def incr_api_calls(tenant_id, n=1):
         usage = TenantUsage(tenant_id=tenant_id, month=month, results_processed=0, api_calls=0, storage_bytes=0)
         db.session.merge(usage)
     usage.api_calls += n
-    db.session.commit()
+    db.session.commit() #end 
