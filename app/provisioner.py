@@ -13,7 +13,7 @@ def provision_tenant(tenant_id):
         PoolName=f"tenant-{tenant_id}-pool"
     )
 
-    # Step 3 — Crear schema en PostgreSQL (no nuevo database)
+    # Step 3 — Crear schema en PostgreSQL (no nuevo database)))))
     create_schema_for_tenant(tenant_id)
 
     # Step 4 — Crear endpoint del tenant (subdominio o route)
