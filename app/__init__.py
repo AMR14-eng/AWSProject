@@ -94,7 +94,7 @@ def register_tenant():
                 "message": "Invalid or empty JSON"
             }), 400
         
-        # Validar campos requeridos
+        # Validar campos requeridossss
         required = ['company_name', 'email', 'contact_name']
         missing = [field for field in required if not data.get(field)]
         
