@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 
-# Carga variables del .env
+# Carga variables del .envvvvv
 load_dotenv()
 
 # ----------------------
