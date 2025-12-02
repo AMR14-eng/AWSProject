@@ -1,4 +1,4 @@
-# Get latest Ubuntu 22.04 AMI
+# Get latest Ubuntu 22.04 AMIIII
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
