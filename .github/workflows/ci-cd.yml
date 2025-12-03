@@ -7,7 +7,7 @@ on:
     branches: [develop, main]
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-east-2
   ECR_REPOSITORY: labcloud-app
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
 
     - name: Run safe tests
       env:
-        AWS_DEFAULT_REGION: us-east-2
+        AWS_DEFAULT_REGION: us-east-1
         AWS_ACCESS_KEY_ID: test-key
         AWS_SECRET_ACCESS_KEY: test-secret
       run: |
@@ -58,7 +58,7 @@ jobs:
   # 2. Staging Deployment
   staging:
     runs-on: ubuntu-latest
-    if: github.ref == ''refs/heads/develop''
+    if: github.ref == 'refs/heads/develop'
     
     steps:
     - name: Checkout code
@@ -90,7 +90,7 @@ jobs:
   # 3. Production Deployment
   production:
     runs-on: ubuntu-latest
-    if: github.ref == ''refs/heads/main''
+    if: github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout code
