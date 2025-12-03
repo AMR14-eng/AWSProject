@@ -7,7 +7,7 @@ on:
     branches: [develop, main]
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: us-east-2  # <- CAMBIADO de us-east-1 a us-east-2
   ECR_REPOSITORY: labcloud-app
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
 
     - name: Run safe tests with AWS mock
       env:
-        AWS_DEFAULT_REGION: us-east-2
+        AWS_DEFAULT_REGION: us-east-2  # <- CAMBIADO
         AWS_ACCESS_KEY_ID: test-key
         AWS_SECRET_ACCESS_KEY: test-secret
       run: |
@@ -54,6 +54,9 @@ jobs:
         echo "✓ Multi-environment deployment setup"
         echo "✓ Manual approval for production"
         echo ""
+        echo "AWS REGION: us-east-2"
+        echo "ECR REPOSITORY: labcloud-app"
+        echo ""
         echo "NEXT STEPS:"
         echo "• Push to 'develop' branch for staging deploy"
         echo "• Push to 'main' branch for production (with approval)"
@@ -73,7 +76,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
+        aws-region: us-east-2  # <- CAMBIADO (usa valor directo en lugar de variable)
 
     - name: Login to Amazon ECR
       id: login-ecr
@@ -89,7 +92,7 @@ jobs:
     - name: Staging Success
       run: |
         echo "✅ STAGING DEPLOYMENT COMPLETE"
-        echo "📦 Image pushed to ECR"
+        echo "📦 Image pushed to ECR (us-east-2)"
         echo "🔗 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:staging-${{ github.sha }}"
 
   # 3. Production Deployment (solo si estás en branch main)
@@ -106,7 +109,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_PRO }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_PRO }}
-        aws-region: ${{ env.AWS_REGION }}
+        aws-region: us-east-2  # <- CAMBIADO
 
     - name: Login to Amazon ECR
       id: login-ecr
@@ -129,4 +132,4 @@ jobs:
       run: |
         echo "✅ PRODUCTION DEPLOYMENT READY"
         echo "🚀 Requires manual approval"
-        echo "📦 Image in ECR ready for deployment"
+        echo "📦 Image in ECR (us-east-2) ready for deployment"
