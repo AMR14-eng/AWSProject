@@ -7,7 +7,7 @@ on:
     branches: [develop, main]
 
 env:
-  AWS_REGION: us-east-2
+  AWS_REGION: us-east-1
   ECR_REPOSITORY: labcloud-app
 
 jobs:
@@ -24,17 +24,21 @@ jobs:
       with:
         python-version: "3.9"
 
-    - name: Install minimal dependencies
+    - name: Install ALL dependencies
       run: |
-        pip install flask pytest
+        # Instalar dependencias del requirements.txt
+        pip install -r requirements.txt
+        # Instalar pytest para testing
+        pip install pytest
 
-    - name: Run safe tests
+    - name: Run safe tests with AWS mock
       env:
-        AWS_DEFAULT_REGION: us-east-1
+        AWS_DEFAULT_REGION: us-east-2
         AWS_ACCESS_KEY_ID: test-key
         AWS_SECRET_ACCESS_KEY: test-secret
       run: |
         cd app
+        # Solo ejecutar tests seguros
         python -m pytest tests/test_safe.py -v
 
     - name: CI/CD Validation
@@ -50,12 +54,12 @@ jobs:
         echo "✓ Multi-environment deployment setup"
         echo "✓ Manual approval for production"
         echo ""
-        echo "AWS CREDENTIALS STATUS:"
-        echo "✓ Secrets configured in GitHub"
-        echo "✓ Ready for deployment"
+        echo "NEXT STEPS:"
+        echo "• Push to 'develop' branch for staging deploy"
+        echo "• Push to 'main' branch for production (with approval)"
         echo "========================================"
 
-  # 2. Staging Deployment
+  # 2. Staging Deployment (solo si estás en branch develop)
   staging:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
@@ -85,9 +89,10 @@ jobs:
     - name: Staging Success
       run: |
         echo "✅ STAGING DEPLOYMENT COMPLETE"
-        echo "📦 Image: ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:staging-${{ github.sha }}"
+        echo "📦 Image pushed to ECR"
+        echo "🔗 ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:staging-${{ github.sha }}"
 
-  # 3. Production Deployment
+  # 3. Production Deployment (solo si estás en branch main)
   production:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -122,6 +127,6 @@ jobs:
 
     - name: Production Ready
       run: |
-        echo "✅ PRODUCTION READY FOR DEPLOYMENT"
-        echo "🚀 Manual approval received"
-        echo "📦 Image: ${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:production-${{ github.sha }}"
+        echo "✅ PRODUCTION DEPLOYMENT READY"
+        echo "🚀 Requires manual approval"
+        echo "📦 Image in ECR ready for deployment"
